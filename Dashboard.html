@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <?!= include('Stylesheet'); ?>
+</head>
+<body>
+  <?!= includeTemplate('BrandHeader'); ?>
+
+  <div class="topbar">
+    <h1>📚 ระบบบันทึกคะแนน</h1>
+    <div class="user-info">
+      <?= teacherName ?> (<?= teacherEmail ?>)<?= isAdmin ? ' · ผู้ดูแลระบบ' : '' ?>
+      &nbsp;·&nbsp;<a href="<?= webAppUrl ?>?page=students" style="color:#ec4899;">🧑‍🎓 จัดการนักเรียน</a>
+      <? if (isAdmin) { ?>
+        &nbsp;·&nbsp;<a href="<?= webAppUrl ?>?page=teachers" style="color:#ec4899;">👤 จัดการครู</a>
+        &nbsp;·&nbsp;<a href="<?= webAppUrl ?>?page=overview" style="color:#ec4899;">📊 ภาพรวมระบบ</a>
+        &nbsp;·&nbsp;<a href="<?= webAppUrl ?>?page=settings" style="color:#ec4899;">⚙️ ตั้งค่าระบบ</a>
+      <? } ?>
+      &nbsp;·&nbsp;<a href="<?= webAppUrl ?>?page=login" style="color:#888;" title="กลับหน้า Login (หากต้องการสลับบัญชี Google ให้ใช้เมนูโปรไฟล์ Google ของเบราว์เซอร์เอง)">ออกจากระบบ</a>
+    </div>
+  </div>
+
+  <div class="toolbar" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+    <button onclick="openAddModal()">+ เพิ่มวิชา</button>
+    <select id="yearSemesterFilter" class="filter-select" onchange="applyYearFilter()" style="margin-left:auto;">
+      <option value="">ทุกปีการศึกษา/เทอม</option>
+    </select>
+  </div>
+
+  <div id="cardGrid" class="card-grid" style="margin-top:16px;"></div>
+  <div id="emptyState" class="empty-state" style="display:none;">
+    ยังไม่มีวิชา กด "+ เพิ่มวิชา" เพื่อเริ่มต้น
+  </div>
+
+  <!-- Modal เพิ่ม/แก้ไขวิชา -->
+  <div class="modal-backdrop" id="modalBackdrop">
+    <div class="modal">
+      <h2 id="modalTitle">เพิ่มวิชาใหม่</h2>
+      <input type="hidden" id="subjectId">
+
+      <label>ชื่อวิชา</label>
+      <input id="subjectName" placeholder="เช่น คณิตศาสตร์ ม.1">
+
+      <label>ห้องเรียน</label>
+      <input id="classRoom" placeholder="เช่น ม.1/2">
+
+      <label>ปีการศึกษา</label>
+      <input id="academicYear" placeholder="เช่น 2569">
+
+      <label>ภาคเรียน</label>
+      <select id="semester">
+        <option value="1">ภาคเรียนที่ 1</option>
+        <option value="2">ภาคเรียนที่ 2</option>
+      </select>
+
+      <p style="font-size:12px;color:#8b7d92;margin:14px 0 4px;border-top:1px solid #f0e6f5;padding-top:10px;">
+        ข้อมูลสำหรับออกรายงาน ปพ.5 (กรอกหรือไม่ก็ได้)
+      </p>
+
+      <label>รหัสวิชา</label>
+      <input id="subjectCode" placeholder="เช่น ค30205">
+
+      <label>กลุ่มสาระการเรียนรู้</label>
+      <input id="learningArea" placeholder="เช่น คณิตศาสตร์">
+
+      <label>ประเภทวิชา</label>
+      <select id="subjectType">
+        <option value="พื้นฐาน">พื้นฐาน</option>
+        <option value="เพิ่มเติม">เพิ่มเติม</option>
+      </select>
+
+      <label>เวลาเรียน (คาบ/สัปดาห์)</label>
+      <input id="hoursPerWeek" type="number" min="0" placeholder="เช่น 4">
+
+      <label>จำนวนหน่วยกิต</label>
+      <input id="credits" type="number" min="0" step="0.5" placeholder="เช่น 2.0">
+
+      <div class="modal-actions">
+        <button class="secondary" onclick="closeModal()">ยกเลิก</button>
+        <button onclick="saveSubject(this)">บันทึก</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal คัดลอกวิชาไปเทอมใหม่ -->
+  <div class="modal-backdrop" id="duplicateModalBackdrop">
+    <div class="modal">
+      <h2>คัดลอกวิชาไปเทอมใหม่</h2>
+      <p style="font-size:12px;color:#8b7d92;margin:0;">
+        จะคัดลอกเฉพาะชื่อวิชาและรายการคะแนน/น้ำหนักเดิมไปตั้งต้นให้ ไม่เอานักเรียนที่ลงทะเบียนหรือคะแนนเดิมมาด้วย
+      </p>
+      <input type="hidden" id="dupOriginalId">
+
+      <label>ชื่อวิชา</label>
+      <input id="dupSubjectName">
+
+      <label>ห้องเรียน</label>
+      <input id="dupClassRoom">
+
+      <label>ปีการศึกษา</label>
+      <input id="dupAcademicYear">
+
+      <label>ภาคเรียน</label>
+      <select id="dupSemester">
+        <option value="1">ภาคเรียนที่ 1</option>
+        <option value="2">ภาคเรียนที่ 2</option>
+      </select>
+
+      <div class="modal-actions">
+        <button class="secondary" onclick="closeDuplicateModal()">ยกเลิก</button>
+        <button onclick="confirmDuplicate(this)">คัดลอกวิชา</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let subjects = [];
+    const WEBAPP_URL = '<?= webAppUrl ?>';
+
+    function loadSubjects() {
+      document.getElementById('cardGrid').innerHTML = skeletonCards(3);
+      google.script.run
+        .withSuccessHandler(onSubjectsLoaded)
+        .withFailureHandler(onError)
+        .getMySubjects();
+    }
+
+    function onSubjectsLoaded(data) {
+      subjects = data;
+      buildYearFilterOptions();
+      applyYearFilter();
+    }
+
+    // สร้างตัวเลือกปีการศึกษา/เทอมจากวิชาที่มีอยู่จริง เรียงปีล่าสุดขึ้นก่อน
+    function buildYearFilterOptions() {
+      const select = document.getElementById('yearSemesterFilter');
+      const previousValue = select.value;
+
+      const combos = {};
+      subjects.forEach(s => {
+        const year = s.AcademicYear || '';
+        const sem = s.Semester || '';
+        if (!year && !sem) return;
+        combos[year + '|' + sem] = { year, sem };
+      });
+
+      const sorted = Object.values(combos).sort((a, b) => {
+        if (a.year !== b.year) return String(b.year).localeCompare(String(a.year), undefined, { numeric: true });
+        return String(b.sem).localeCompare(String(a.sem), undefined, { numeric: true });
+      });
+
+      select.innerHTML = '<option value="">ทุกปีการศึกษา/เทอม</option>';
+      sorted.forEach(c => {
+        const opt = document.createElement('option');
+        opt.value = c.year + '|' + c.sem;
+        opt.innerText = 'ปีการศึกษา ' + (c.year || '-') + ' เทอม ' + (c.sem || '-');
+        select.appendChild(opt);
+      });
+
+      // ค่าเริ่มต้น: ถ้าเคยเลือกไว้และยังมีอยู่ ให้คงค่าเดิม ไม่งั้นเลือกปี/เทอมล่าสุดอัตโนมัติ
+      if (previousValue && Array.from(select.options).some(o => o.value === previousValue)) {
+        select.value = previousValue;
+      } else if (sorted.length) {
+        select.value = sorted[0].year + '|' + sorted[0].sem;
+      } else {
+        select.value = '';
+      }
+    }
+
+    function applyYearFilter() {
+      const value = document.getElementById('yearSemesterFilter').value;
+      if (!value) {
+        renderSubjects(subjects);
+        return;
+      }
+      const [year, sem] = value.split('|');
+      const filtered = subjects.filter(s => String(s.AcademicYear || '') === year && String(s.Semester || '') === sem);
+      renderSubjects(filtered);
+    }
+
+    function renderSubjects(data) {
+      const grid = document.getElementById('cardGrid');
+      const empty = document.getElementById('emptyState');
+      grid.innerHTML = '';
+
+      if (!data.length) {
+        empty.style.display = 'block';
+        return;
+      }
+      empty.style.display = 'none';
+
+      data.forEach(s => {
+        const card = document.createElement('div');
+        card.className = 'subject-card';
+        card.innerHTML =
+          '<h3>' + escapeHtml(s.SubjectName) + '</h3>' +
+          '<p>ห้อง ' + escapeHtml(s.ClassRoom || '-') +
+          ' · ปีการศึกษา ' + escapeHtml(s.AcademicYear || '-') +
+          ' เทอม ' + escapeHtml(s.Semester || '-') + '</p>' +
+          '<div class="actions">' +
+          '  <a class="btn" style="text-decoration:none;display:inline-block;" href="' + WEBAPP_URL + '?page=subject&id=' + s.SubjectID + '">จัดการ</a>' +
+          '  <button class="secondary" onclick="openEditModal(\'' + s.SubjectID + '\')">แก้ไข</button>' +
+          '  <button class="info" onclick="openDuplicateModal(\'' + s.SubjectID + '\')">คัดลอก</button>' +
+          '  <button class="danger" onclick="removeSubject(\'' + s.SubjectID + '\')">ลบ</button>' +
+          '</div>';
+        grid.appendChild(card);
+      });
+    }
+
+    function openAddModal() {
+      document.getElementById('modalTitle').innerText = 'เพิ่มวิชาใหม่';
+      document.getElementById('subjectId').value = '';
+      document.getElementById('subjectName').value = '';
+      document.getElementById('classRoom').value = '';
+      document.getElementById('academicYear').value = '';
+      document.getElementById('semester').value = '1';
+      document.getElementById('subjectCode').value = '';
+      document.getElementById('learningArea').value = '';
+      document.getElementById('subjectType').value = 'พื้นฐาน';
+      document.getElementById('hoursPerWeek').value = '';
+      document.getElementById('credits').value = '';
+      document.getElementById('modalBackdrop').classList.add('show');
+    }
+
+    function openEditModal(id) {
+      const s = subjects.find(x => x.SubjectID === id);
+      if (!s) return;
+      document.getElementById('modalTitle').innerText = 'แก้ไขวิชา';
+      document.getElementById('subjectId').value = s.SubjectID;
+      document.getElementById('subjectName').value = s.SubjectName;
+      document.getElementById('classRoom').value = s.ClassRoom;
+      document.getElementById('academicYear').value = s.AcademicYear;
+      document.getElementById('semester').value = s.Semester || '1';
+      document.getElementById('subjectCode').value = s.SubjectCode || '';
+      document.getElementById('learningArea').value = s.LearningArea || '';
+      document.getElementById('subjectType').value = s.SubjectType || 'พื้นฐาน';
+      document.getElementById('hoursPerWeek').value = s.HoursPerWeek || '';
+      document.getElementById('credits').value = s.Credits || '';
+      document.getElementById('modalBackdrop').classList.add('show');
+    }
+
+    function closeModal() {
+      document.getElementById('modalBackdrop').classList.remove('show');
+    }
+
+    function saveSubject(btn) {
+      const form = {
+        subjectId: document.getElementById('subjectId').value,
+        subjectName: document.getElementById('subjectName').value.trim(),
+        classRoom: document.getElementById('classRoom').value.trim(),
+        academicYear: document.getElementById('academicYear').value.trim(),
+        semester: document.getElementById('semester').value,
+        subjectCode: document.getElementById('subjectCode').value.trim(),
+        learningArea: document.getElementById('learningArea').value.trim(),
+        subjectType: document.getElementById('subjectType').value,
+        hoursPerWeek: document.getElementById('hoursPerWeek').value.trim(),
+        credits: document.getElementById('credits').value.trim()
+      };
+      if (!form.subjectName) { alert('กรุณากรอกชื่อวิชา'); return; }
+
+      setButtonLoading(btn, true);
+      const done = data => { setButtonLoading(btn, false); onSaved(data); };
+      const fail = err => { setButtonLoading(btn, false); onError(err); };
+
+      if (form.subjectId) {
+        google.script.run.withSuccessHandler(done).withFailureHandler(fail).updateSubject(form);
+      } else {
+        google.script.run.withSuccessHandler(done).withFailureHandler(fail).addSubject(form);
+      }
+    }
+
+    function onSaved(data) {
+      closeModal();
+      onSubjectsLoaded(data);
+    }
+
+    function removeSubject(id) {
+      if (!confirm('ยืนยันลบวิชานี้? (ข้อมูลคะแนนที่เกี่ยวข้องจะไม่ถูกลบอัตโนมัติ)')) return;
+      google.script.run.withSuccessHandler(onSubjectsLoaded).withFailureHandler(onError).deleteSubject(id);
+    }
+
+    // ---------- คัดลอกวิชาไปเทอมใหม่ ----------
+    function openDuplicateModal(id) {
+      const s = subjects.find(x => x.SubjectID === id);
+      if (!s) return;
+      document.getElementById('dupOriginalId').value = s.SubjectID;
+      document.getElementById('dupSubjectName').value = s.SubjectName;
+      document.getElementById('dupClassRoom').value = s.ClassRoom || '';
+      document.getElementById('dupAcademicYear').value = s.AcademicYear || '';
+      // เดาภาคเรียนถัดไปให้อัตโนมัติ (ถ้าเทอม 1 แนะนำเทอม 2 ปีเดียวกัน, ถ้าเทอม 2 แนะนำเทอม 1 ปีถัดไป)
+      if (String(s.Semester) === '1') {
+        document.getElementById('dupSemester').value = '2';
+      } else {
+        document.getElementById('dupSemester').value = '1';
+        const yearNum = parseInt(s.AcademicYear, 10);
+        if (!isNaN(yearNum)) document.getElementById('dupAcademicYear').value = String(yearNum + 1);
+      }
+      document.getElementById('duplicateModalBackdrop').classList.add('show');
+    }
+
+    function closeDuplicateModal() {
+      document.getElementById('duplicateModalBackdrop').classList.remove('show');
+    }
+
+    function confirmDuplicate(btn) {
+      const originalId = document.getElementById('dupOriginalId').value;
+      const form = {
+        subjectName: document.getElementById('dupSubjectName').value.trim(),
+        classRoom: document.getElementById('dupClassRoom').value.trim(),
+        academicYear: document.getElementById('dupAcademicYear').value.trim(),
+        semester: document.getElementById('dupSemester').value
+      };
+      if (!form.subjectName) { alert('กรุณากรอกชื่อวิชา'); return; }
+
+      setButtonLoading(btn, true);
+      google.script.run
+        .withSuccessHandler(data => {
+          setButtonLoading(btn, false);
+          closeDuplicateModal();
+          onSubjectsLoaded(data);
+          alert('คัดลอกวิชาเรียบร้อยแล้ว ไปที่แท็บ "รายชื่อนักเรียน" ของวิชาใหม่เพื่อเลือกนักเรียนเข้าเรียนได้เลย');
+        })
+        .withFailureHandler(err => { setButtonLoading(btn, false); onError(err); })
+        .duplicateSubject(originalId, form);
+    }
+
+    function onError(err) {
+      alert('เกิดข้อผิดพลาด: ' + (err && err.message ? err.message : err));
+    }
+
+    function escapeHtml(str) {
+      return String(str).replace(/[&<>"']/g, m => (
+        { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]
+      ));
+    }
+
+    loadSubjects();
+  </script>
+</body>
+</html>

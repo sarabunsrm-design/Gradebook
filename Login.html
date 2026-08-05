@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <?!= include('Stylesheet'); ?>
+  <style>
+    body { display:flex; align-items:center; justify-content:center; min-height:100vh; padding:16px; }
+    .login-card {
+      background:#fff; border-radius:16px; padding:40px 36px; max-width:400px; width:100%;
+      box-shadow:0 4px 20px rgba(167,139,250,0.15); text-align:center;
+    }
+    @media (max-width: 480px) {
+      .login-card { padding:28px 20px; border-radius:12px; }
+    }
+    .login-card h1 { font-size:22px; margin:0 0 4px; color:#ec4899; }
+    .brand-header { justify-content: center; }
+    .login-card .subtitle { color:#8b7d92; font-size:13px; margin-bottom:28px; }
+    .login-card .greeting {
+      background:#faf5ff; color:#a21caf; border-radius:10px; padding:10px; font-size:13px; margin-bottom:20px;
+    }
+    .role-btn {
+      display:flex; align-items:center; gap:12px; width:100%; text-align:left;
+      background:#fff; border:1.5px solid #f3e8ff; border-radius:14px; padding:14px 16px;
+      margin-bottom:12px; cursor:pointer; text-decoration:none; color:#4a3b52; transition:border-color 0.15s, background 0.15s;
+    }
+    .role-btn:hover { border-color:#ec4899; background:#fdf2f8; }
+    .role-btn .icon { font-size:26px; }
+    .role-btn .label { font-weight:600; font-size:15px; }
+    .role-btn .desc { font-size:12px; color:#8b7d92; margin-top:2px; }
+  </style>
+</head>
+<body>
+  <div class="login-card">
+    <?!= includeTemplate('BrandHeader'); ?>
+    <h1>📚 ระบบบันทึกคะแนน</h1>
+    <p class="subtitle">เลือกประเภทผู้ใช้งานเพื่อเข้าสู่ระบบ</p>
+
+    <? if (teacherName) { ?>
+      <div class="greeting">สวัสดีคุณ <?= teacherName ?> 👋 พร้อมเข้าสู่ระบบครู</div>
+    <? } ?>
+
+    <a class="role-btn" href="<?= webAppUrl ?>?page=teacher">
+      <span class="icon">🧑‍🏫</span>
+      <span>
+        <div class="label">ครู / ผู้ดูแลระบบ</div>
+        <div class="desc">เข้าสู่ระบบด้วยบัญชี Google ของโรงเรียน</div>
+      </span>
+    </a>
+
+    <a class="role-btn" href="<?= webAppUrl ?>?page=student">
+      <span class="icon">🎓</span>
+      <span>
+        <div class="label">นักเรียน</div>
+        <div class="desc">ดูคะแนนด้วยรหัสประจำตัวนักเรียน</div>
+      </span>
+    </a>
+  </div>
+</body>
+</html>

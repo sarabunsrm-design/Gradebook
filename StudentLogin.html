@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <?!= include('Stylesheet'); ?>
+  <style>
+    .login-box {
+      max-width: 360px; margin: 60px auto; background:#fff; border-radius:12px;
+      padding: 28px 24px; box-shadow: 0 4px 16px rgba(167,139,250,0.15); text-align:center;
+    }
+    @media (max-width: 480px) {
+      .login-box { margin: 24px auto; padding: 20px 16px; }
+    }
+    .login-box h2 { margin-top:0; }
+    .brand-header { justify-content: center; }
+    .login-box input {
+      width:100%; padding:10px; margin-top:10px; border-radius:10px; border:1px solid #ecdff5; font-family:inherit;
+      text-align:center; font-size:15px;
+    }
+    .login-box button { width:100%; margin-top:16px; padding:10px; font-size:14px; }
+    .login-error { color:#991b1b; font-size:13px; margin-top:10px; display:none; }
+
+    .result-wrapper { max-width: 700px; margin: 30px auto; }
+    .result-header { text-align:center; margin-bottom:20px; }
+    .result-header h2 { margin:0 0 4px; }
+    .result-header p { color:#888; font-size:13px; margin:0; }
+
+    .subject-summary { background:#fff; border-radius:16px; padding:16px 18px; margin-bottom:16px;
+      box-shadow:0 2px 8px rgba(167,139,250,0.14); border-left:4px solid #ec4899; }
+    .subject-summary h3 { margin:0 0 10px; font-size:16px; display:flex; justify-content:space-between; align-items:center; }
+    .subject-summary .grade-pill {
+      background:#a78bfa; color:#fff; padding:4px 12px; border-radius:20px; font-size:14px; font-weight:600;
+    }
+    .period-scores { display:grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap:8px; margin-top:8px; }
+    .period-scores .box { background:#faf5ff; border-radius:14px; padding:8px; text-align:center; }
+    .period-scores .box .label { font-size:11px; color:#888; }
+    .period-scores .box .value { font-size:15px; font-weight:600; margin-top:2px; }
+    .total-row { margin-top:12px; text-align:right; font-size:14px; }
+    .back-link { display:inline-block; margin-bottom:16px; color:#ec4899; text-decoration:none; font-size:13px; }
+    .no-items-note { font-size:12px; color:#aaa; margin-top:6px; }
+
+    .raw-scores { margin-bottom:10px; }
+    .raw-score-period-label { font-size:11px; color:#888; font-weight:600; margin:8px 0 4px; }
+    .raw-score-period-label:first-child { margin-top:0; }
+    .raw-score-row { display:flex; justify-content:space-between; align-items:center; padding:3px 0; font-size:13px; }
+    .raw-score-name { color:#555; }
+    .raw-score-badge { padding:2px 10px; border-radius:6px; background:#f3f0ff; color:#7c3aed; font-weight:600; font-size:12px; }
+    .raw-score-badge.low { background:#fb7185; color:#fff; }
+  </style>
+</head>
+<body>
+  <!-- หน้าจอกรอกรหัส -->
+  <div class="login-box" id="loginBox">
+    <?!= includeTemplate('BrandHeader'); ?>
+    <h2>🎓 ดูคะแนนนักเรียน</h2>
+    <p style="color:#888;font-size:13px;margin:0;">เข้าสู่ระบบด้วยรหัสประจำตัวนักเรียนของคุณ</p>
+    <input id="inputUsername" placeholder="Username (รหัสประจำตัวนักเรียน)">
+    <input id="inputPassword" placeholder="Password (รหัสประจำตัวนักเรียน)">
+    <button onclick="login(this)">ดูคะแนน</button>
+    <p class="login-error" id="loginError"></p>
+  </div>
+
+  <!-- หน้าจอแสดงผลคะแนน -->
+  <div class="result-wrapper" id="resultWrapper" style="display:none;">
+    <?!= includeTemplate('BrandHeader'); ?>
+    <a class="back-link" href="#" onclick="logout(); return false;">← ออกจากระบบ / ดูรหัสอื่น</a>
+    <div class="result-header">
+      <h2 id="resultName"></h2>
+      <p id="resultCode"></p>
+    </div>
+    <div id="subjectList"></div>
+    <div id="noSubjectsNote" class="empty-state" style="display:none;">ยังไม่มีวิชาที่ลงทะเบียนไว้</div>
+  </div>
+
+  <script>
+    function login(btn) {
+      const username = document.getElementById('inputUsername').value.trim();
+      const password = document.getElementById('inputPassword').value.trim();
+      const errBox = document.getElementById('loginError');
+      errBox.style.display = 'none';
+
+      if (!username || !password) {
+        errBox.innerText = 'กรุณากรอกรหัสประจำตัวนักเรียนให้ครบทั้งสองช่อง';
+        errBox.style.display = 'block';
+        return;
+      }
+
+      setButtonLoading(btn, true);
+      google.script.run
+        .withSuccessHandler(data => { setButtonLoading(btn, false); renderResult(data); })
+        .withFailureHandler(err => {
+          setButtonLoading(btn, false);
+          errBox.innerText = (err && err.message) ? err.message : String(err);
+          errBox.style.display = 'block';
+        })
+        .getStudentPortalData(username, password);
+    }
+
+    function logout() {
+      document.getElementById('resultWrapper').style.display = 'none';
+      document.getElementById('loginBox').style.display = 'block';
+      document.getElementById('inputUsername').value = '';
+      document.getElementById('inputPassword').value = '';
+    }
+
+    function renderResult(data) {
+      document.getElementById('loginBox').style.display = 'none';
+      document.getElementById('resultWrapper').style.display = 'block';
+      document.getElementById('resultName').innerText = data.studentName;
+      document.getElementById('resultCode').innerText = 'รหัสประจำตัว: ' + data.studentCode;
+
+      const list = document.getElementById('subjectList');
+      const noSubjects = document.getElementById('noSubjectsNote');
+      list.innerHTML = '';
+
+      if (!data.subjects.length) {
+        noSubjects.style.display = 'block';
+        return;
+      }
+      noSubjects.style.display = 'none';
+
+      data.subjects.forEach(subj => {
+        const box = document.createElement('div');
+        box.className = 'subject-summary';
+
+        let rawScoresHtml = '<div class="raw-scores">';
+        subj.periods.forEach(p => {
+          const itemsInPeriod = (subj.items || []).filter(i => i.period === p);
+          if (!itemsInPeriod.length) return;
+          rawScoresHtml += '<div class="raw-score-period-label">' + p + '</div>';
+          itemsInPeriod.forEach(i => {
+            const hasValue = i.rawScore !== '' && i.rawScore !== null && i.rawScore !== undefined;
+            const max = Number(i.maxScore) || 0;
+            const rawNum = hasValue ? Number(i.rawScore) : null;
+            const isLow = hasValue && max > 0 && rawNum < max / 2;
+            const display = hasValue ? i.rawScore : '-';
+            rawScoresHtml +=
+              '<div class="raw-score-row"><span class="raw-score-name">' + escapeHtml(i.itemName) + '</span>' +
+              '<span class="raw-score-badge' + (isLow ? ' low' : '') + '">' + display + ' / ' + max + '</span></div>';
+          });
+        });
+        rawScoresHtml += '</div>';
+
+        let periodBoxes = subj.periods.map(p =>
+          '<div class="box"><div class="label">' + p + '</div><div class="value">' +
+          (subj.periodScores[p] || 0) + '</div></div>'
+        ).join('');
+
+        box.innerHTML =
+          '<h3>' + escapeHtml(subj.subjectName) +
+          (subj.classRoom ? ' <span style="font-size:12px;color:#888;font-weight:normal;">(' + escapeHtml(subj.classRoom) + ')</span>' : '') +
+          '<span class="grade-pill">เกรด ' + subj.grade + '</span></h3>' +
+          (subj.hasItems ? rawScoresHtml : '') +
+          '<div class="period-scores">' + periodBoxes + '</div>' +
+          '<div class="total-row">คะแนนรวม: <b>' + subj.total + '</b></div>' +
+          (subj.hasItems ? '' : '<div class="no-items-note">ครูยังไม่ได้ตั้งรายการคะแนนสำหรับวิชานี้</div>');
+
+        list.appendChild(box);
+      });
+    }
+
+    function escapeHtml(str) {
+      return String(str).replace(/[&<>"']/g, m => (
+        { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]
+      ));
+    }
+
+    // กด Enter ในช่องกรอกก็ล็อกอินได้เลย
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Enter' && document.getElementById('loginBox').style.display !== 'none') {
+        login(document.querySelector('#loginBox button'));
+      }
+    });
+  </script>
+</body>
+</html>

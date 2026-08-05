@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <?!= include('Stylesheet'); ?>
+  <style>
+    .back-link { display:inline-block; margin-bottom:16px; color:#ec4899; text-decoration:none; font-size:13px; }
+    .settings-card { background:#fff; border-radius:16px; padding:20px 24px; max-width:480px; box-shadow:0 2px 8px rgba(167,139,250,0.14); }
+    .logo-preview { display:flex; align-items:center; gap:12px; margin-top:10px; }
+    .logo-preview img { height:56px; width:56px; object-fit:contain; border-radius:14px; border:1px solid #eee; background:#fafafa; }
+    .logo-preview .empty-box {
+      height:56px; width:56px; border-radius:14px; border:1px dashed #ccc; display:flex; align-items:center;
+      justify-content:center; color:#bbb; font-size:11px; text-align:center; background:#fafafa;
+    }
+    .hint { font-size:12px; color:#888; margin-top:4px; }
+  </style>
+</head>
+<body>
+  <?!= includeTemplate('BrandHeader'); ?>
+  <a class="back-link" href="<?= webAppUrl ?>?page=teacher">← กลับหน้ารายวิชา</a>
+  <a class="back-link" style="float:right;color:#888;" href="<?= webAppUrl ?>?page=login" title="กลับหน้า Login">ออกจากระบบ</a>
+  <div class="topbar">
+    <h1>⚙️ ตั้งค่าระบบ</h1>
+  </div>
+
+  <div class="settings-card">
+    <label>ชื่อโรงเรียน</label>
+    <input id="schoolName" placeholder="เช่น โรงเรียนสาธิตตัวอย่าง">
+
+    <label style="margin-top:16px;display:block;">โลโก้โรงเรียน</label>
+    <div class="logo-preview">
+      <div id="logoPreviewBox"><div class="empty-box">ไม่มีโลโก้</div></div>
+      <div>
+        <button class="secondary" onclick="document.getElementById('logoFileInput').click()">📤 อัปโหลดรูป</button>
+        <input type="file" id="logoFileInput" accept="image/*" style="display:none;" onchange="handleLogoUpload(event)">
+      </div>
+    </div>
+    <p class="hint">แนะนำไฟล์ขนาดเล็กกว่า 30KB (เช่น รูปสี่เหลี่ยมจัตุรัส 128x128px) เพราะระบบเก็บโลโก้เป็นข้อมูลฝังในสเปรดชีตโดยตรง</p>
+
+    <label style="margin-top:12px;display:block;">หรือวางลิงก์ URL รูปโลโก้แทน</label>
+    <input id="schoolLogoUrl" placeholder="https://...">
+    <p class="hint">ถ้ากรอกทั้งสองแบบ ระบบจะใช้อันที่แก้ไขล่าสุด (อัปโหลดรูปจะเขียนทับช่องนี้อัตโนมัติ)</p>
+
+    <label style="margin-top:12px;display:block;">ที่อยู่โรงเรียน (แสดงในรายงาน ปพ.5)</label>
+    <input id="schoolAddress" placeholder="เช่น อำเภอเมือง จังหวัดตรัง">
+
+    <label style="margin-top:12px;display:block;">สำนักงานเขตพื้นที่การศึกษา (แสดงในรายงาน ปพ.5)</label>
+    <input id="educationArea" placeholder="เช่น สำนักงานเขตพื้นที่การศึกษามัธยมศึกษาตรัง กระบี่">
+
+    <div class="modal-actions" style="margin-top:18px;">
+      <button onclick="save(this)">บันทึก</button>
+    </div>
+  </div>
+
+  <script>
+    const WEBAPP_URL = '<?= webAppUrl ?>';
+    let currentLogoValue = '';
+
+    function loadSettings() {
+      google.script.run.withSuccessHandler(applySettings).withFailureHandler(onError).getSettings();
+    }
+
+    function applySettings(settings) {
+      document.getElementById('schoolName').value = settings.schoolName || '';
+      currentLogoValue = settings.schoolLogo || '';
+      document.getElementById('schoolLogoUrl').value = currentLogoValue;
+      document.getElementById('schoolAddress').value = settings.schoolAddress || '';
+      document.getElementById('educationArea').value = settings.educationArea || '';
+      renderLogoPreview(currentLogoValue);
+    }
+
+    function renderLogoPreview(value) {
+      const box = document.getElementById('logoPreviewBox');
+      if (value) {
+        box.innerHTML = '<img src="' + value.replace(/"/g, '&quot;') + '" alt="โลโก้">';
+      } else {
+        box.innerHTML = '<div class="empty-box">ไม่มีโลโก้</div>';
+      }
+    }
+
+    function handleLogoUpload(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      if (file.size > 100 * 1024) {
+        alert('ไฟล์รูปใหญ่เกินไป (เกิน 100KB) กรุณาเลือกรูปที่เล็กลง หรือใช้ลิงก์ URL แทน');
+        event.target.value = '';
+        return;
+      }
+
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        currentLogoValue = e.target.result; // data:image/...;base64,....
+        document.getElementById('schoolLogoUrl').value = currentLogoValue;
+        renderLogoPreview(currentLogoValue);
+      };
+      reader.readAsDataURL(file);
+    }
+
+    // ถ้าแก้ช่อง URL เอง ให้ preview อัปเดตตามด้วย
+    document.addEventListener('DOMContentLoaded', () => {
+      document.getElementById('schoolLogoUrl').addEventListener('input', e => {
+        currentLogoValue = e.target.value.trim();
+        renderLogoPreview(currentLogoValue);
+      });
+    });
+
+    function save(btn) {
+      const form = {
+        schoolName: document.getElementById('schoolName').value.trim(),
+        schoolLogo: document.getElementById('schoolLogoUrl').value.trim(),
+        schoolAddress: document.getElementById('schoolAddress').value.trim(),
+        educationArea: document.getElementById('educationArea').value.trim()
+      };
+      setButtonLoading(btn, true);
+      google.script.run
+        .withSuccessHandler(() => { setButtonLoading(btn, false); alert('บันทึกการตั้งค่าเรียบร้อยแล้ว'); })
+        .withFailureHandler(err => { setButtonLoading(btn, false); onError(err); })
+        .saveSettings(form);
+    }
+
+    function onError(err) {
+      alert('เกิดข้อผิดพลาด: ' + (err && err.message ? err.message : err));
+    }
+
+    loadSettings();
+  </script>
+</body>
+</html>

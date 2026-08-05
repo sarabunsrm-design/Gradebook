@@ -1,0 +1,11 @@
+<? var __settings = getSettings(); ?>
+<? if (__settings.schoolName || __settings.schoolLogo) { ?>
+<div class="brand-header" style="display:flex;align-items:center;gap:10px;padding:10px 14px;margin-bottom:16px;background:#a78bfa;border-radius:12px;">
+  <? if (__settings.schoolLogo) { ?>
+    <img src="<?!= __settings.schoolLogo ?>" alt="โลโก้โรงเรียน" style="height:36px;width:36px;object-fit:contain;border-radius:6px;flex-shrink:0;">
+  <? } ?>
+  <? if (__settings.schoolName) { ?>
+    <span style="font-size:14px;font-weight:600;color:#fff;"><?= __settings.schoolName ?></span>
+  <? } ?>
+</div>
+<? } ?>

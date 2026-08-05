@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <?!= include('Stylesheet'); ?>
+  <style>
+    table { width:100%; border-collapse: collapse; background:#fff; border-radius:14px; overflow:hidden; }
+    th, td { text-align:left; padding:10px 12px; font-size:13px; border-bottom:1px solid #eee; }
+    th { background:#f8f3fd; color:#6b4c7a; }
+    .back-link { display:inline-block; margin-bottom:16px; color:#ec4899; text-decoration:none; font-size:13px; }
+    .toolbar { display:flex; gap:8px; margin-bottom:16px; flex-wrap:wrap; align-items:center; }
+    .filter-input { padding:8px; border-radius:10px; border:1px solid #ecdff5; font-family:inherit; font-size:13px; }
+  </style>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+</head>
+<body>
+  <?!= includeTemplate('BrandHeader'); ?>
+  <a class="back-link" href="<?= webAppUrl ?>?page=teacher">← กลับหน้ารายวิชา</a>
+  <a class="back-link" style="float:right;color:#888;" href="<?= webAppUrl ?>?page=login" title="กลับหน้า Login (หากต้องการสลับบัญชี Google ให้ใช้เมนูโปรไฟล์ Google ของเบราว์เซอร์เอง)">ออกจากระบบ</a>
+  <div class="topbar">
+    <h1>🧑‍🎓 จัดการฐานข้อมูลนักเรียน (กลาง)</h1>
+  </div>
+  <p style="color:#888;font-size:13px;margin-top:-8px;">
+    นักเรียนที่เพิ่มไว้ที่นี่ใช้ร่วมกันได้ทุกวิชา/ทุกครู — เข้าไปที่หน้า "จัดการวิชา" ของแต่ละวิชาเพื่อเลือกนักเรียนจากที่นี่เข้าเรียนวิชานั้นๆ
+  </p>
+
+  <div class="toolbar">
+    <button onclick="openAddModal()">+ เพิ่มนักเรียน</button>
+    <button class="info" onclick="openPromoteModal()">🎓 เลื่อนชั้นยกห้อง</button>
+    <button class="secondary" onclick="downloadTemplate()">📄 ดาวน์โหลดไฟล์ตัวอย่าง</button>
+    <button class="secondary" onclick="document.getElementById('excelFileInput').click()">📥 นำเข้าจาก Excel</button>
+    <input type="file" id="excelFileInput" accept=".xlsx,.xls,.csv" style="display:none;" onchange="handleExcelImport(event)">
+    <input class="filter-input" id="searchBox" placeholder="ค้นหาชื่อ/รหัส/ห้อง..." oninput="applyFilter()" style="margin-left:auto;">
+  </div>
+  <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:#8b7d92;margin-bottom:10px;cursor:pointer;">
+    <input type="checkbox" id="activeOnlyToggle" checked onchange="applyFilter()" style="min-height:auto;width:auto;">
+    แสดงเฉพาะนักเรียนที่ "กำลังเรียน" อยู่
+  </label>
+
+  <div class="table-scroll">
+  <table>
+    <thead><tr><th>เลขที่</th><th>รหัสนักเรียน</th><th>ชื่อ-สกุล</th><th>ห้อง</th><th>สถานะ</th><th></th></tr></thead>
+    <tbody id="studentTableBody"></tbody>
+  </table>
+  </div>
+  <div id="emptyState" class="empty-state" style="display:none;">ยังไม่มีนักเรียนในฐานข้อมูล</div>
+
+  <!-- Modal เพิ่ม/แก้ไขนักเรียน -->
+  <div class="modal-backdrop" id="modalBackdrop">
+    <div class="modal">
+      <h2 id="modalTitle">เพิ่มนักเรียนใหม่</h2>
+      <input type="hidden" id="studentId">
+
+      <label>เลขที่ (ในห้อง)</label>
+      <input id="studentRoll" type="number" min="1" placeholder="เช่น 1">
+
+      <label>รหัสนักเรียน</label>
+      <input id="studentCode" placeholder="เช่น 12345">
+
+      <label>ชื่อ-สกุล</label>
+      <input id="studentName" placeholder="เช่น เด็กชายสมชาย ใจดี">
+
+      <label>ห้องเรียน</label>
+      <input id="studentClass" placeholder="เช่น ม.1/2">
+
+      <label>สถานะ</label>
+      <select id="studentStatus">
+        <option value="กำลังเรียน">กำลังเรียน</option>
+        <option value="จบการศึกษา">จบการศึกษา</option>
+        <option value="ย้ายออก">ย้ายออก</option>
+      </select>
+
+      <div class="modal-actions">
+        <button class="secondary" onclick="closeModal()">ยกเลิก</button>
+        <button onclick="saveStudent(this)">บันทึก</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal เลื่อนชั้นยกห้อง -->
+  <div class="modal-backdrop" id="promoteModalBackdrop">
+    <div class="modal">
+      <h2>เลื่อนชั้นยกห้อง</h2>
+      <p style="font-size:12px;color:#8b7d92;margin:0;">
+        เปลี่ยนห้องเรียนของนักเรียนที่ "กำลังเรียน" ทั้งห้องพร้อมกันทีเดียว หรือถ้าเป็นห้องสุดท้าย (เช่น ม.6) ให้ติ๊ก "จบการศึกษาแล้ว" แทนได้เลย — ไม่กระทบห้อง/เลขที่ที่เคยแสดงในวิชาเก่าที่ลงทะเบียนไปแล้ว (ข้อมูลเก่ายังคงถูกต้องเหมือนเดิมทุกประการ)
+      </p>
+
+      <label>ห้องเดิม</label>
+      <select id="promoteOldRoom">
+        <option value="">-- เลือกห้องเดิม --</option>
+      </select>
+
+      <label style="display:flex;align-items:center;gap:6px;margin-top:12px;cursor:pointer;">
+        <input type="checkbox" id="promoteGraduate" onchange="togglePromoteMode()" style="min-height:auto;width:auto;">
+        <span style="font-size:13px;">ห้องนี้จบการศึกษาแล้ว (เช่น ม.6) — ไม่ต้องมีห้องใหม่</span>
+      </label>
+
+      <div id="promoteRoomFields">
+        <label>ห้องใหม่</label>
+        <input id="promoteNewRoom" placeholder="เช่น ม.2/2">
+
+        <label style="display:flex;align-items:center;gap:6px;margin-top:12px;cursor:pointer;">
+          <input type="checkbox" id="promoteClearRoll" style="min-height:auto;width:auto;">
+          <span style="font-size:13px;">ล้างเลขที่เดิม (เผื่อจัดห้องใหม่ เลขที่เปลี่ยนไปหมด)</span>
+        </label>
+      </div>
+
+      <div class="modal-actions">
+        <button class="secondary" onclick="closePromoteModal()">ยกเลิก</button>
+        <button onclick="confirmPromote(this)">ยืนยัน</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let allStudents = [];
+
+    function loadStudents() {
+      document.getElementById('studentTableBody').innerHTML = skeletonRows(5, 6);
+      google.script.run.withSuccessHandler(data => { allStudents = data; applyFilter(); }).withFailureHandler(onError).getAllStudentsCentral();
+    }
+
+    function applyFilter() {
+      const q = document.getElementById('searchBox').value.trim().toLowerCase();
+      const activeOnly = document.getElementById('activeOnlyToggle').checked;
+
+      let filtered = allStudents;
+      if (activeOnly) filtered = filtered.filter(s => (s.status || 'กำลังเรียน') === 'กำลังเรียน');
+      if (q) {
+        filtered = filtered.filter(s =>
+          String(s.studentCode).toLowerCase().includes(q) ||
+          String(s.name).toLowerCase().includes(q) ||
+          String(s.classRoom).toLowerCase().includes(q) ||
+          String(s.rollNumber || '').toLowerCase().includes(q)
+        );
+      }
+      renderStudents(filtered);
+    }
+
+    function renderStudents(data) {
+      const body = document.getElementById('studentTableBody');
+      const empty = document.getElementById('emptyState');
+      body.innerHTML = '';
+
+      if (!data.length) { empty.style.display = 'block'; return; }
+      empty.style.display = 'none';
+
+      data.forEach(s => {
+        const tr = document.createElement('tr');
+        const status = s.status || 'กำลังเรียน';
+        const statusColor = status === 'กำลังเรียน' ? '#0f766e' : '#8b7d92';
+        tr.innerHTML =
+          '<td>' + escapeHtml(s.rollNumber || '-') + '</td>' +
+          '<td>' + escapeHtml(s.studentCode) + '</td>' +
+          '<td>' + escapeHtml(s.name) + '</td>' +
+          '<td>' + escapeHtml(s.classRoom || '-') + '</td>' +
+          '<td style="color:' + statusColor + ';">' + escapeHtml(status) + '</td>' +
+          '<td>' +
+          '<button class="secondary" onclick="openEditModal(\'' + s.studentId + '\')">แก้ไข</button> ' +
+          '<button class="danger" onclick="removeStudent(\'' + s.studentId + '\')">ลบ</button>' +
+          '</td>';
+        body.appendChild(tr);
+      });
+    }
+
+    function openAddModal() {
+      document.getElementById('modalTitle').innerText = 'เพิ่มนักเรียนใหม่';
+      document.getElementById('studentId').value = '';
+      document.getElementById('studentRoll').value = '';
+      document.getElementById('studentCode').value = '';
+      document.getElementById('studentName').value = '';
+      document.getElementById('studentClass').value = '';
+      document.getElementById('studentStatus').value = 'กำลังเรียน';
+      document.getElementById('modalBackdrop').classList.add('show');
+    }
+
+    function openEditModal(studentId) {
+      const s = allStudents.find(x => x.studentId === studentId);
+      if (!s) return;
+      document.getElementById('modalTitle').innerText = 'แก้ไขข้อมูลนักเรียน';
+      document.getElementById('studentId').value = s.studentId;
+      document.getElementById('studentRoll').value = s.rollNumber || '';
+      document.getElementById('studentCode').value = s.studentCode;
+      document.getElementById('studentName').value = s.name;
+      document.getElementById('studentClass').value = s.classRoom;
+      document.getElementById('studentStatus').value = s.status || 'กำลังเรียน';
+      document.getElementById('modalBackdrop').classList.add('show');
+    }
+
+    function closeModal() {
+      document.getElementById('modalBackdrop').classList.remove('show');
+    }
+
+    function saveStudent(btn) {
+      const form = {
+        studentId: document.getElementById('studentId').value,
+        rollNumber: document.getElementById('studentRoll').value.trim(),
+        studentCode: document.getElementById('studentCode').value.trim(),
+        name: document.getElementById('studentName').value.trim(),
+        classRoom: document.getElementById('studentClass').value.trim(),
+        status: document.getElementById('studentStatus').value
+      };
+      if (!form.studentCode || !form.name) { alert('กรุณากรอกรหัสและชื่อนักเรียนให้ครบ'); return; }
+
+      setButtonLoading(btn, true);
+      const handler = data => { setButtonLoading(btn, false); closeModal(); allStudents = data; applyFilter(); };
+      const fail = err => { setButtonLoading(btn, false); onError(err); };
+      if (form.studentId) {
+        google.script.run.withSuccessHandler(handler).withFailureHandler(fail).updateStudentCentral(form);
+      } else {
+        google.script.run.withSuccessHandler(handler).withFailureHandler(fail).addStudentCentral(form);
+      }
+    }
+
+    function removeStudent(studentId) {
+      if (!confirm('ยืนยันลบนักเรียนคนนี้ออกจากฐานข้อมูล? คะแนนและการลงทะเบียนวิชาทั้งหมดของนักเรียนคนนี้จะถูกลบไปด้วย\n\nถ้าแค่ต้องการบันทึกว่าจบการศึกษา/ย้ายออก แนะนำให้ใช้ปุ่ม "แก้ไข" แล้วเปลี่ยนสถานะแทนการลบ เพื่อรักษาประวัติคะแนนไว้')) return;
+      google.script.run.withSuccessHandler(data => { allStudents = data; applyFilter(); }).withFailureHandler(onError).deleteStudentCentral(studentId);
+    }
+
+    // ---------- เลื่อนชั้นยกห้อง ----------
+    function openPromoteModal() {
+      document.getElementById('promoteNewRoom').value = '';
+      document.getElementById('promoteClearRoll').checked = false;
+      document.getElementById('promoteGraduate').checked = false;
+      document.getElementById('promoteRoomFields').style.display = 'block';
+      google.script.run.withSuccessHandler(rooms => {
+        const select = document.getElementById('promoteOldRoom');
+        select.innerHTML = '<option value="">-- เลือกห้องเดิม --</option>';
+        rooms.forEach(r => {
+          const opt = document.createElement('option');
+          opt.value = r;
+          opt.innerText = r;
+          select.appendChild(opt);
+        });
+        document.getElementById('promoteModalBackdrop').classList.add('show');
+      }).withFailureHandler(onError).getDistinctClassRooms();
+    }
+
+    function togglePromoteMode() {
+      const isGraduate = document.getElementById('promoteGraduate').checked;
+      document.getElementById('promoteRoomFields').style.display = isGraduate ? 'none' : 'block';
+    }
+
+    function closePromoteModal() {
+      document.getElementById('promoteModalBackdrop').classList.remove('show');
+    }
+
+    function confirmPromote(btn) {
+      const graduate = document.getElementById('promoteGraduate').checked;
+      const form = {
+        oldRoom: document.getElementById('promoteOldRoom').value,
+        newRoom: document.getElementById('promoteNewRoom').value.trim(),
+        clearRollNumbers: document.getElementById('promoteClearRoll').checked,
+        graduate: graduate
+      };
+      if (!form.oldRoom) { alert('กรุณาเลือกห้องเดิม'); return; }
+      if (!graduate && !form.newRoom) { alert('กรุณากรอกห้องใหม่ หรือติ๊ก "ห้องนี้จบการศึกษาแล้ว"'); return; }
+
+      const confirmMsg = graduate
+        ? 'ยืนยันเปลี่ยนสถานะนักเรียนทุกคนใน "' + form.oldRoom + '" เป็น "จบการศึกษา" ?'
+        : 'ยืนยันเปลี่ยนห้องนักเรียนทุกคนใน "' + form.oldRoom + '" เป็น "' + form.newRoom + '" ?';
+      if (!confirm(confirmMsg)) return;
+
+      setButtonLoading(btn, true);
+      google.script.run
+        .withSuccessHandler(result => {
+          setButtonLoading(btn, false);
+          closePromoteModal();
+          allStudents = result.students;
+          applyFilter();
+          const msg = graduate
+            ? 'ตั้งค่าจบการศึกษาสำเร็จ อัปเดตนักเรียน ' + result.updated + ' คน'
+            : 'เลื่อนชั้นสำเร็จ อัปเดตนักเรียน ' + result.updated + ' คน';
+          alert(msg);
+        })
+        .withFailureHandler(err => { setButtonLoading(btn, false); onError(err); })
+        .bulkPromoteClassRoom(form);
+    }
+
+    // ---------- นำเข้า/ดาวน์โหลดไฟล์ Excel ----------
+    function downloadTemplate() {
+      const wsData = [
+        ['เลขที่', 'รหัสนักเรียน', 'ชื่อ-สกุล', 'ห้องเรียน'],
+        ['1', '12345', 'เด็กชายสมชาย ใจดี', 'ม.1/2'],
+        ['2', '12346', 'เด็กหญิงสมหญิง ใจงาม', 'ม.1/2']
+      ];
+      const ws = XLSX.utils.aoa_to_sheet(wsData);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'นักเรียน');
+      XLSX.writeFile(wb, 'ตัวอย่างนำเข้ารายชื่อนักเรียน.xlsx');
+    }
+
+    function handleExcelImport(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        try {
+          const data = new Uint8Array(e.target.result);
+          const workbook = XLSX.read(data, { type: 'array' });
+          const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+          const rows = XLSX.utils.sheet_to_json(firstSheet, { header: 1, defval: '' });
+
+          // แถวแรกคือหัวตาราง ข้ามไป แล้วแปลงแถวที่เหลือตามตำแหน่งคอลัมน์ (เลขที่, รหัส, ชื่อ, ห้อง)
+          const parsed = rows.slice(1)
+            .filter(r => r.some(cell => String(cell).trim() !== ''))
+            .map(r => ({ rollNumber: r[0], studentCode: r[1], name: r[2], classRoom: r[3] }));
+
+          if (!parsed.length) { alert('ไม่พบข้อมูลในไฟล์ที่เลือก'); return; }
+
+          showOverlay('กำลังนำเข้าข้อมูล ' + parsed.length + ' รายการ...', true);
+          google.script.run
+            .withSuccessHandler(result => {
+              hideOverlay();
+              allStudents = result.students;
+              applyFilter();
+              let msg = 'นำเข้าสำเร็จ: เพิ่มใหม่ ' + result.imported + ' คน, อัปเดตข้อมูลเดิม ' + result.updated + ' คน';
+              if (result.errors && result.errors.length) msg += '\n\nปัญหาที่พบ:\n' + result.errors.join('\n');
+              alert(msg);
+            })
+            .withFailureHandler(err => { hideOverlay(); onError(err); })
+            .bulkImportStudentsCentral(parsed);
+        } catch (err) {
+          alert('ไม่สามารถอ่านไฟล์นี้ได้ กรุณาตรวจสอบว่าเป็นไฟล์ Excel (.xlsx) หรือ CSV ที่ถูกต้อง');
+        } finally {
+          event.target.value = '';
+        }
+      };
+      reader.readAsArrayBuffer(file);
+    }
+
+    function onError(err) {
+      alert('เกิดข้อผิดพลาด: ' + (err && err.message ? err.message : err));
+    }
+
+    function escapeHtml(str) {
+      return String(str).replace(/[&<>"']/g, m => (
+        { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]
+      ));
+    }
+
+    loadStudents();
+  </script>
+</body>
+</html>

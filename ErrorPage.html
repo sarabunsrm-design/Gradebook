@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <?!= include('Stylesheet'); ?>
+</head>
+<body>
+  <div style="max-width:600px;margin:60px auto;">
+    <h2>⚠️ เกิดข้อผิดพลาดในระบบ</h2>
+    <div style="background:#fff;border-left:4px solid #ef4444;padding:14px 18px;border-radius:6px;">
+      <p style="margin:0;font-family:monospace;font-size:13px;color:#991b1b;"><?= message ?></p>
+    </div>
+    <p style="font-size:13px;color:#888;margin-top:16px;">
+      กรุณาแจ้งข้อความข้างบนนี้ให้ผู้ดูแลระบบ หรือกลับไปหน้าหลัก
+    </p>
+    <p><a href="<?= webAppUrl ?>?page=teacher">← กลับหน้าหลัก</a></p>
+  </div>
+</body>
+</html>

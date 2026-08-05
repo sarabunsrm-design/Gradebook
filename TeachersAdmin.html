@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <?!= include('Stylesheet'); ?>
+  <style>
+    table { width:100%; border-collapse: collapse; background:#fff; border-radius:14px; overflow:hidden; }
+    th, td { text-align:left; padding:10px 12px; font-size:13px; border-bottom:1px solid #eee; }
+    th { background:#f8f3fd; color:#6b4c7a; }
+    .role-badge { font-size:12px; padding:2px 10px; border-radius:12px; background:#f3f0ff; color:#7c3aed; }
+    .role-badge.admin { background:#ede9fe; color:#6d28d9; }
+    .back-link { display:inline-block; margin-bottom:16px; color:#ec4899; text-decoration:none; font-size:13px; }
+    .toolbar { display:flex; gap:8px; margin-bottom:16px; flex-wrap:wrap; }
+  </style>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+</head>
+<body>
+  <?!= includeTemplate('BrandHeader'); ?>
+  <a class="back-link" href="<?= webAppUrl ?>?page=teacher">← กลับหน้ารายวิชา</a>
+  <a class="back-link" style="float:right;color:#888;" href="<?= webAppUrl ?>?page=login" title="กลับหน้า Login (หากต้องการสลับบัญชี Google ให้ใช้เมนูโปรไฟล์ Google ของเบราว์เซอร์เอง)">ออกจากระบบ</a>
+  <div class="topbar">
+    <h1>👤 จัดการรายชื่อครู</h1>
+  </div>
+
+  <div class="toolbar">
+    <button onclick="openAddModal()">+ เพิ่มครู</button>
+    <button class="secondary" onclick="downloadTemplate()">📄 ดาวน์โหลดไฟล์ตัวอย่าง</button>
+    <button class="secondary" onclick="document.getElementById('excelFileInput').click()">📥 นำเข้าจาก Excel</button>
+    <input type="file" id="excelFileInput" accept=".xlsx,.xls,.csv" style="display:none;" onchange="handleExcelImport(event)">
+    <button class="info" onclick="runAccessCheck()">🔒 ตรวจสอบสิทธิ์เข้าถึงสเปรดชีต</button>
+  </div>
+
+  <div id="accessCheckResult" style="display:none;margin-bottom:16px;"></div>
+
+  <div class="table-scroll">
+  <table style="margin-top:0;">
+    <thead><tr><th>ชื่อ</th><th>อีเมล (Google Account)</th><th>สิทธิ์</th><th></th></tr></thead>
+    <tbody id="teacherTableBody"></tbody>
+  </table>
+  </div>
+  <div id="emptyState" class="empty-state" style="display:none;">ยังไม่มีครูในระบบ</div>
+
+  <!-- Modal เพิ่ม/แก้ไขครู -->
+  <div class="modal-backdrop" id="modalBackdrop">
+    <div class="modal">
+      <h2 id="modalTitle">เพิ่มครูใหม่</h2>
+      <input type="hidden" id="teacherId">
+
+      <label>ชื่อ-สกุล</label>
+      <input id="teacherName" placeholder="เช่น ครูสมชาย ใจดี">
+
+      <label>อีเมล (ต้องเป็น Google Account ที่ใช้ล็อกอินจริง)</label>
+      <input id="teacherEmail" placeholder="เช่น somchai@school.ac.th">
+
+      <label>สิทธิ์การใช้งาน</label>
+      <select id="teacherRole">
+        <option value="teacher">ครูทั่วไป (จัดการได้เฉพาะวิชาตัวเอง)</option>
+        <option value="admin">ผู้ดูแลระบบ (เห็น/จัดการได้ทุกวิชา + จัดการรายชื่อครู)</option>
+      </select>
+
+      <div class="modal-actions">
+        <button class="secondary" onclick="closeModal()">ยกเลิก</button>
+        <button onclick="saveTeacher(this)">บันทึก</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const WEBAPP_URL = '<?= webAppUrl ?>';
+    let teachers = [];
+
+    function loadTeachers() {
+      document.getElementById('teacherTableBody').innerHTML = skeletonRows(4, 5);
+      google.script.run.withSuccessHandler(renderTeachers).withFailureHandler(onError).getAllTeachers();
+    }
+
+    function renderTeachers(data) {
+      teachers = data;
+      const body = document.getElementById('teacherTableBody');
+      const empty = document.getElementById('emptyState');
+      body.innerHTML = '';
+
+      if (!data.length) { empty.style.display = 'block'; return; }
+      empty.style.display = 'none';
+
+      data.forEach(t => {
+        const tr = document.createElement('tr');
+        const badgeClass = t.role === 'admin' ? 'admin' : '';
+        const roleLabel = t.role === 'admin' ? 'ผู้ดูแลระบบ' : 'ครูทั่วไป';
+        tr.innerHTML =
+          '<td>' + escapeHtml(t.name) + '</td>' +
+          '<td>' + escapeHtml(t.email) + '</td>' +
+          '<td><span class="role-badge ' + badgeClass + '">' + roleLabel + '</span></td>' +
+          '<td>' +
+          '<button class="secondary" onclick="openEditModal(\'' + t.teacherId + '\')">แก้ไข</button> ' +
+          '<button class="danger" onclick="removeTeacher(\'' + t.teacherId + '\')">ลบ</button>' +
+          '</td>';
+        body.appendChild(tr);
+      });
+    }
+
+    function openAddModal() {
+      document.getElementById('modalTitle').innerText = 'เพิ่มครูใหม่';
+      document.getElementById('teacherId').value = '';
+      document.getElementById('teacherName').value = '';
+      document.getElementById('teacherEmail').value = '';
+      document.getElementById('teacherRole').value = 'teacher';
+      document.getElementById('modalBackdrop').classList.add('show');
+    }
+
+    function openEditModal(teacherId) {
+      const t = teachers.find(x => x.teacherId === teacherId);
+      if (!t) return;
+      document.getElementById('modalTitle').innerText = 'แก้ไขข้อมูลครู';
+      document.getElementById('teacherId').value = t.teacherId;
+      document.getElementById('teacherName').value = t.name;
+      document.getElementById('teacherEmail').value = t.email;
+      document.getElementById('teacherRole').value = t.role;
+      document.getElementById('modalBackdrop').classList.add('show');
+    }
+
+    function closeModal() {
+      document.getElementById('modalBackdrop').classList.remove('show');
+    }
+
+    function saveTeacher(btn) {
+      const form = {
+        teacherId: document.getElementById('teacherId').value,
+        name: document.getElementById('teacherName').value.trim(),
+        email: document.getElementById('teacherEmail').value.trim(),
+        role: document.getElementById('teacherRole').value
+      };
+      if (!form.name || !form.email) { alert('กรุณากรอกชื่อและอีเมลให้ครบ'); return; }
+
+      setButtonLoading(btn, true);
+      const handler = data => { setButtonLoading(btn, false); closeModal(); renderTeachers(data); };
+      const fail = err => { setButtonLoading(btn, false); onError(err); };
+      if (form.teacherId) {
+        google.script.run.withSuccessHandler(handler).withFailureHandler(fail).updateTeacher(form);
+      } else {
+        google.script.run.withSuccessHandler(handler).withFailureHandler(fail).addTeacher(form);
+      }
+    }
+
+    function removeTeacher(teacherId) {
+      if (!confirm('ยืนยันลบครูคนนี้ออกจากระบบ? (วิชาที่เคยสอนไว้จะยังอยู่ แต่จะแก้ไขไม่ได้จนกว่าจะมีครูดูแล)')) return;
+      google.script.run.withSuccessHandler(renderTeachers).withFailureHandler(onError).deleteTeacher(teacherId);
+    }
+
+    // ---------- นำเข้า/ดาวน์โหลดไฟล์ Excel ----------
+    function downloadTemplate() {
+      const wsData = [
+        ['ชื่อ-สกุล', 'อีเมล', 'สิทธิ์ (teacher หรือ admin)'],
+        ['ครูสมชาย ใจดี', 'somchai@school.ac.th', 'teacher'],
+        ['ครูสมหญิง ใจงาม', 'somying@school.ac.th', 'admin']
+      ];
+      const ws = XLSX.utils.aoa_to_sheet(wsData);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'ครู');
+      XLSX.writeFile(wb, 'ตัวอย่างนำเข้ารายชื่อครู.xlsx');
+    }
+
+    function handleExcelImport(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        try {
+          const data = new Uint8Array(e.target.result);
+          const workbook = XLSX.read(data, { type: 'array' });
+          const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+          const rows = XLSX.utils.sheet_to_json(firstSheet, { header: 1, defval: '' });
+
+          // แถวแรกคือหัวตาราง ข้ามไป แล้วแปลงแถวที่เหลือตามตำแหน่งคอลัมน์ (ชื่อ, อีเมล, สิทธิ์)
+          const parsed = rows.slice(1)
+            .filter(r => r.some(cell => String(cell).trim() !== ''))
+            .map(r => ({ name: r[0], email: r[1], role: r[2] }));
+
+          if (!parsed.length) { alert('ไม่พบข้อมูลในไฟล์ที่เลือก'); return; }
+
+          showOverlay('กำลังนำเข้าข้อมูล ' + parsed.length + ' รายการ...', true);
+          google.script.run
+            .withSuccessHandler(result => {
+              hideOverlay();
+              renderTeachers(result.teachers);
+              let msg = 'นำเข้าสำเร็จ ' + result.imported + ' คน';
+              if (result.skipped) msg += ' (ข้าม ' + result.skipped + ' คนที่มีอีเมลซ้ำอยู่แล้ว)';
+              if (result.errors && result.errors.length) msg += '\n\nปัญหาที่พบ:\n' + result.errors.join('\n');
+              alert(msg);
+            })
+            .withFailureHandler(err => { hideOverlay(); onError(err); })
+            .bulkImportTeachers(parsed);
+        } catch (err) {
+          alert('ไม่สามารถอ่านไฟล์นี้ได้ กรุณาตรวจสอบว่าเป็นไฟล์ Excel (.xlsx) หรือ CSV ที่ถูกต้อง');
+        } finally {
+          event.target.value = ''; // เคลียร์ไว้ เผื่อจะเลือกไฟล์เดิมซ้ำอีกครั้ง
+        }
+      };
+      reader.readAsArrayBuffer(file);
+    }
+
+    function onError(err) {
+      alert('เกิดข้อผิดพลาด: ' + (err && err.message ? err.message : err));
+    }
+
+    // ---------- ตรวจสอบสิทธิ์เข้าถึงสเปรดชีต ----------
+    function runAccessCheck() {
+      const box = document.getElementById('accessCheckResult');
+      box.style.display = 'block';
+      box.innerHTML = '<div class="spinner-center"><div class="spinner"></div>กำลังตรวจสอบ...</div>';
+
+      google.script.run
+        .withSuccessHandler(renderAccessCheckResult)
+        .withFailureHandler(onError)
+        .checkTeacherAccess();
+    }
+
+    function renderAccessCheckResult(result) {
+      const box = document.getElementById('accessCheckResult');
+
+      if (!result.missing.length) {
+        box.innerHTML =
+          '<div style="background:#ccfbf1;color:#0f766e;padding:12px 16px;border-radius:10px;font-size:13px;">' +
+          '✅ ครูทุกคน (' + result.totalTeachers + ' คน) มีสิทธิ์แก้ไขสเปรดชีตนี้ครบแล้ว' +
+          '</div>';
+        return;
+      }
+
+      const missingListHtml = result.missing.map(t =>
+        '<li>' + escapeHtml(t.name) + ' — ' + escapeHtml(t.email) + '</li>'
+      ).join('');
+
+      box.innerHTML =
+        '<div style="background:#ffe4e6;color:#9f1239;padding:12px 16px;border-radius:10px;font-size:13px;">' +
+        '⚠️ พบครู ' + result.missing.length + ' คน (จากทั้งหมด ' + result.totalTeachers + ' คน) ที่ยังไม่มีสิทธิ์แก้ไขสเปรดชีตนี้ ' +
+        'จะเข้าใช้งานระบบไม่ได้จนกว่าจะได้รับสิทธิ์' +
+        '<ul style="margin:8px 0;padding-left:20px;">' + missingListHtml + '</ul>' +
+        '<button class="warning" onclick="grantMissingAccess(this)">➕ เพิ่มสิทธิ์ให้ทุกคนที่ขาด</button>' +
+        '<p style="font-size:11px;color:#7a2e3d;margin-top:8px;">' +
+        'หมายเหตุ: ถ้าโรงเรียนแชร์สเปรดชีตแบบ "ทั้งโดเมนเข้าถึงได้" แทนการแชร์รายบุคคล รายชื่อด้านบนอาจไม่ตรงกับความเป็นจริง 100% ' +
+        'กรุณาตรวจสอบการตั้งค่าแชร์ด้วยตาเองเพิ่มเติมด้วย' +
+        '</p></div>';
+
+      window.__missingTeacherEmails = result.missing.map(t => t.email);
+    }
+
+    function grantMissingAccess(btn) {
+      const emails = window.__missingTeacherEmails || [];
+      if (!emails.length) return;
+      if (!confirm('ยืนยันเพิ่มสิทธิ์แก้ไขสเปรดชีตให้ครู ' + emails.length + ' คนนี้?')) return;
+
+      setButtonLoading(btn, true);
+      google.script.run
+        .withSuccessHandler(result => {
+          setButtonLoading(btn, false);
+          let msg = 'เพิ่มสิทธิ์สำเร็จ ' + result.granted.length + ' คน';
+          if (result.failed.length) {
+            msg += '\n\nไม่สำเร็จ ' + result.failed.length + ' คน:\n' +
+              result.failed.map(f => f.email + ' (' + f.reason + ')').join('\n');
+          }
+          alert(msg);
+          runAccessCheck();
+        })
+        .withFailureHandler(err => { setButtonLoading(btn, false); onError(err); })
+        .grantAccessToTeachers(emails);
+    }
+
+    function escapeHtml(str) {
+      return String(str).replace(/[&<>"']/g, m => (
+        { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]
+      ));
+    }
+
+    loadTeachers();
+  </script>
+</body>
+</html>

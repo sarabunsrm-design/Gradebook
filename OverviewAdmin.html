@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <?!= include('Stylesheet'); ?>
+  <style>
+    .back-link { display:inline-block; margin-bottom:16px; color:#ec4899; text-decoration:none; font-size:13px; }
+    .stat-grid { display:grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap:14px; margin-bottom:20px; }
+    .stat-card { background:#fff; border-radius:16px; padding:16px 18px; box-shadow:0 2px 8px rgba(167,139,250,0.14); text-align:center; }
+    .stat-card .num { font-size:26px; font-weight:700; color:#ec4899; }
+    .stat-card .label { font-size:13px; color:#888; margin-top:4px; }
+    table { width:100%; border-collapse: collapse; background:#fff; border-radius:14px; overflow:hidden; }
+    th, td { text-align:left; padding:10px 12px; font-size:13px; border-bottom:1px solid #eee; }
+    th { background:#f8f3fd; color:#6b4c7a; }
+    .link-btn { color:#ec4899; text-decoration:none; }
+  </style>
+</head>
+<body>
+  <?!= includeTemplate('BrandHeader'); ?>
+  <a class="back-link" href="<?= webAppUrl ?>?page=teacher">← กลับหน้ารายวิชา</a>
+  <a class="back-link" style="float:right;color:#888;" href="<?= webAppUrl ?>?page=login" title="กลับหน้า Login">ออกจากระบบ</a>
+  <div class="topbar">
+    <h1>📊 ภาพรวมระบบ</h1>
+  </div>
+
+  <div class="stat-grid" id="statGrid"></div>
+
+  <div style="margin-bottom:14px;">
+    <select id="yearSemesterFilter" class="filter-select" onchange="applyYearFilter()">
+      <option value="">ทุกปีการศึกษา/เทอม</option>
+    </select>
+  </div>
+
+  <div class="table-scroll">
+  <table>
+    <thead>
+      <tr><th>วิชา</th><th>ครูผู้สอน</th><th>ห้อง</th><th>ปี/เทอม</th><th>จำนวนนักเรียน</th><th>คะแนนเฉลี่ย</th><th></th></tr>
+    </thead>
+    <tbody id="subjectTableBody"></tbody>
+  </table>
+  </div>
+  <div id="emptyState" class="empty-state" style="display:none;">ยังไม่มีวิชาในระบบ</div>
+
+  <script>
+    const WEBAPP_URL = '<?= webAppUrl ?>';
+    let allSubjects = [];
+
+    function load() {
+      document.getElementById('statGrid').innerHTML =
+        '<div class="stat-card"><span class="skeleton skeleton-text" style="height:26px;width:50%;margin:0 auto;"></span><span class="skeleton skeleton-text short" style="margin:8px auto 0;"></span></div>'.repeat(3);
+      document.getElementById('subjectTableBody').innerHTML = skeletonRows(7, 5);
+      google.script.run.withSuccessHandler(onLoaded).withFailureHandler(onError).getOverviewMeta();
+    }
+
+    function onLoaded(data) {
+      document.getElementById('statGrid').innerHTML =
+        statCard(data.totalSubjects, 'วิชาทั้งหมด') +
+        statCard(data.totalTeachers, 'ครูทั้งหมด') +
+        statCard(data.totalStudents, 'นักเรียนทั้งหมด (ฐานข้อมูลกลาง)');
+
+      allSubjects = data.subjects;
+      buildYearFilterOptions();
+      applyYearFilter();
+    }
+
+    function buildYearFilterOptions() {
+      const select = document.getElementById('yearSemesterFilter');
+      const previousValue = select.value;
+
+      const combos = {};
+      allSubjects.forEach(s => {
+        const year = s.academicYear || '';
+        const sem = s.semester || '';
+        if (!year && !sem) return;
+        combos[year + '|' + sem] = { year, sem };
+      });
+
+      const sorted = Object.values(combos).sort((a, b) => {
+        if (a.year !== b.year) return String(b.year).localeCompare(String(a.year), undefined, { numeric: true });
+        return String(b.sem).localeCompare(String(a.sem), undefined, { numeric: true });
+      });
+
+      select.innerHTML = '<option value="">ทุกปีการศึกษา/เทอม (คำนวณคะแนนเฉลี่ยช้ากว่าปกติ)</option>';
+      sorted.forEach(c => {
+        const opt = document.createElement('option');
+        opt.value = c.year + '|' + c.sem;
+        opt.innerText = 'ปีการศึกษา ' + (c.year || '-') + ' เทอม ' + (c.sem || '-');
+        select.appendChild(opt);
+      });
+
+      if (previousValue && Array.from(select.options).some(o => o.value === previousValue)) {
+        select.value = previousValue;
+      } else if (sorted.length) {
+        select.value = sorted[0].year + '|' + sorted[0].sem;
+      } else {
+        select.value = '';
+      }
+    }
+
+    function applyYearFilter() {
+      const value = document.getElementById('yearSemesterFilter').value;
+      const filtered = !value ? allSubjects
+        : allSubjects.filter(s => {
+            const [year, sem] = value.split('|');
+            return String(s.academicYear || '') === year && String(s.semester || '') === sem;
+          });
+      render(filtered);
+      loadAvgStats(filtered);
+    }
+
+    function render(subjectRows) {
+      const body = document.getElementById('subjectTableBody');
+      const empty = document.getElementById('emptyState');
+      body.innerHTML = '';
+
+      if (!subjectRows.length) { empty.style.display = 'block'; return; }
+      empty.style.display = 'none';
+
+      subjectRows.forEach(s => {
+        const tr = document.createElement('tr');
+        tr.id = 'subjectRow_' + s.subjectId;
+        tr.innerHTML =
+          '<td>' + escapeHtml(s.subjectName) + '</td>' +
+          '<td>' + escapeHtml(s.teacherName || '-') + '</td>' +
+          '<td>' + escapeHtml(s.classRoom || '-') + '</td>' +
+          '<td>' + escapeHtml((s.academicYear || '-') + ' / ' + (s.semester || '-')) + '</td>' +
+          '<td>' + s.studentCount + '</td>' +
+          '<td id="avgCell_' + s.subjectId + '" style="color:#aaa;">...</td>' +
+          '<td><a class="link-btn" href="' + WEBAPP_URL + '?page=subject&id=' + s.subjectId + '">เปิดวิชา →</a></td>';
+        body.appendChild(tr);
+      });
+    }
+
+    // คำนวณคะแนนเฉลี่ยเฉพาะวิชาที่กำลังแสดงอยู่ตอนนี้เท่านั้น (หลังกรองปี/เทอมแล้ว) ไม่ใช่ทุกวิชาในระบบ
+    function loadAvgStats(subjectRows) {
+      const ids = subjectRows.map(s => s.subjectId);
+      if (!ids.length) return;
+
+      google.script.run
+        .withSuccessHandler(stats => {
+          ids.forEach(id => {
+            const cell = document.getElementById('avgCell_' + id);
+            if (!cell) return;
+            const val = stats[id];
+            cell.style.color = '';
+            cell.innerText = (val === null || val === undefined) ? '-' : val;
+          });
+        })
+        .withFailureHandler(onError)
+        .getSubjectAvgStats(ids);
+    }
+
+    function statCard(num, label) {
+      return '<div class="stat-card"><div class="num">' + num + '</div><div class="label">' + label + '</div></div>';
+    }
+
+    function onError(err) {
+      alert('เกิดข้อผิดพลาด: ' + (err && err.message ? err.message : err));
+    }
+
+    function escapeHtml(str) {
+      return String(str).replace(/[&<>"']/g, m => (
+        { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]
+      ));
+    }
+
+    load();
+  </script>
+</body>
+</html>

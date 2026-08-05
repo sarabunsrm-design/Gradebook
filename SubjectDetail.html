@@ -1,0 +1,1276 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <?!= include('Stylesheet'); ?>
+  <style>
+    .tabs { display:flex; gap:4px; margin-bottom:16px; border-bottom:1px solid #ddd; overflow-x:auto; -webkit-overflow-scrolling:touch; }
+    .tab { padding:10px 16px; cursor:pointer; font-size:14px; color:#666; border-bottom:2px solid transparent; white-space:nowrap; flex-shrink:0; }
+    .tab.active { color:#ec4899; border-bottom-color:#ec4899; font-weight:600; }
+    .tab-content { display:none; }
+    .tab-content.active { display:block; }
+    table { width:100%; border-collapse: collapse; background:#fff; border-radius:14px; overflow:hidden; }
+    th, td { text-align:left; padding:10px 12px; font-size:13px; border-bottom:1px solid #eee; }
+    #characterWrapper table th, #characterWrapper table td { padding:6px 8px; font-size:12px; text-align:center; white-space:nowrap; }
+    #characterWrapper table td:nth-child(3), #characterWrapper table th:nth-child(3) { text-align:left; white-space:normal; }
+    th { background:#f8f3fd; color:#6b4c7a; }
+    .period-block { background:#fff; border-radius:16px; padding:14px 16px; margin-bottom:14px; box-shadow:0 2px 8px rgba(167,139,250,0.14); }
+    .period-block h4 { margin:0 0 8px; font-size:14px; display:flex; justify-content:space-between; align-items:center; }
+    .weight-badge { font-size:12px; padding:2px 8px; border-radius:16px; background:#f3f0ff; color:#7c3aed; }
+    .weight-badge.ok { background:#ccfbf1; color:#0f766e; }
+    .weight-badge.warn { background:#ffedd5; color:#c2410c; }
+    .back-link { display:inline-block; margin-bottom:16px; color:#ec4899; text-decoration:none; font-size:13px; }
+    .total-weight { text-align:right; font-size:13px; margin-top:8px; }
+    textarea { width:100%; min-height:100px; padding:8px; border-radius:10px; border:1px solid #ecdff5; font-family:inherit; }
+    .toolbar { display:flex; gap:8px; margin-bottom:14px; flex-wrap:wrap; }
+
+    .por5-page { background:#fff; padding:18px 20px; border-radius:14px; box-shadow:0 2px 8px rgba(167,139,250,0.14); max-width:920px; color:#000; }
+    .por5-page h2 { text-align:center; margin:0 0 4px; font-size:18px; }
+    .por5-page .center { text-align:center; }
+    .por5-info-grid { display:grid; grid-template-columns: 1fr 1fr; gap:4px 20px; font-size:13px; margin:16px 0; }
+    .por5-page table.data-table { margin-top:10px; border-collapse:collapse; width:100%; border-radius:0; overflow:visible; table-layout:fixed; }
+    .por5-page table.data-table th, .por5-page table.data-table td { font-size:12px; text-align:center; border:1px solid #333; padding:4px 6px; border-radius:0; color:#000; }
+    .por5-page table.por5-info-table { border-collapse:collapse; width:100%; margin:10px 0; }
+    .por5-page table.por5-info-table td { border:none; text-align:left; font-size:16px; padding:6px 4px; line-height:1.4; }
+    .por5-page table.sign-table { border-collapse:collapse; width:100%; margin-top:10px; }
+    .por5-page table.sign-table td { border:none; text-align:left; font-size:16px; padding:16px 4px; }
+    .por5-section-title { font-weight:600; font-size:16px; margin:20px 0 6px; }
+    .por5-signature { margin-top:40px; font-size:13px; }
+    .por5-signature .sign-line { margin:26px 0 4px; }
+
+    .print-hidden-target { position:absolute; left:-9999px; top:0; }
+
+    @page { size: A4; margin: 10mm; }
+
+    @media print {
+      body * { visibility: hidden; }
+      #por5ReportWrapper, #por5ReportWrapper *,
+      #characterPrintWrapper, #characterPrintWrapper * { visibility: visible; }
+      #por5ReportWrapper, #characterPrintWrapper { position: absolute; top:0; left:0; width:100%; }
+      .por5-page { box-shadow:none; max-width:100%; }
+    }
+  </style>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+</head>
+<body>
+  <?!= includeTemplate('BrandHeader'); ?>
+  <a class="back-link" href="<?= webAppUrl ?>?page=teacher">← กลับหน้ารายวิชา</a>
+  <a class="back-link" style="float:right;color:#888;" href="<?= webAppUrl ?>?page=login" title="กลับหน้า Login (หากต้องการสลับบัญชี Google ให้ใช้เมนูโปรไฟล์ Google ของเบราว์เซอร์เอง)">ออกจากระบบ</a>
+  <div class="topbar">
+    <h1>📖 <?= subjectName ?></h1>
+  </div>
+
+  <div class="tabs">
+    <div class="tab active" data-tab="students" onclick="switchTab('students')">รายชื่อนักเรียน</div>
+    <div class="tab" data-tab="scoreitems" onclick="switchTab('scoreitems')">รายการคะแนน</div>
+    <div class="tab" data-tab="scoreentry" onclick="switchTab('scoreentry')">กรอกคะแนน</div>
+    <div class="tab" data-tab="character" onclick="switchTab('character')">คุณลักษณะฯ</div>
+    <div class="tab" data-tab="summary" onclick="switchTab('summary')">สรุปผล/เกรด</div>
+    <div class="tab" data-tab="por5" onclick="switchTab('por5')">ปพ.5</div>
+  </div>
+
+  <!-- TAB: นักเรียน -->
+  <div class="tab-content active" id="tab-students">
+    <div class="toolbar">
+      <button onclick="openSelectStudentsModal()">+ เลือกนักเรียนจากฐานข้อมูล</button>
+      <a class="btn secondary" style="text-decoration:none;display:inline-block;" href="<?= webAppUrl ?>?page=students">🧑‍🎓 จัดการฐานข้อมูลนักเรียน</a>
+    </div>
+    <div class="table-scroll">
+    <table>
+      <thead><tr><th>เลขที่</th><th>รหัสนักเรียน</th><th>ชื่อ-สกุล</th><th>ห้อง</th><th></th></tr></thead>
+      <tbody id="studentTableBody"></tbody>
+    </table>
+    </div>
+    <div id="studentEmptyState" class="empty-state" style="display:none;">ยังไม่มีนักเรียนในวิชานี้</div>
+  </div>
+
+  <!-- TAB: รายการคะแนน -->
+  <div class="tab-content" id="tab-scoreitems">
+    <div class="toolbar">
+      <button onclick="openAddItemModal()">+ เพิ่มรายการคะแนน</button>
+    </div>
+    <div id="periodBlocks"></div>
+  </div>
+
+  <!-- TAB: กรอกคะแนน -->
+  <div class="tab-content" id="tab-scoreentry">
+    <div class="toolbar">
+      <button class="warning" onclick="openBulkScoreModal()">📋 ลงคะแนนซ้ำ</button>
+      <button onclick="saveAllScores(this)">💾 บันทึกคะแนนทั้งหมด</button>
+    </div>
+    <div id="scoreEntryWrapper" style="overflow-x:auto;"></div>
+    <div id="scoreEntryEmptyState" class="empty-state" style="display:none;"></div>
+  </div>
+
+  <!-- Modal: ลงคะแนนซ้ำ (กรอกคะแนน) -->
+  <div class="modal-backdrop" id="bulkScoreModalBackdrop">
+    <div class="modal" style="width:440px;max-height:85vh;overflow-y:auto;">
+      <h2>ลงคะแนนซ้ำ</h2>
+      <p style="font-size:12px;color:#8b7d92;margin:0;">
+        เลือกรายการคะแนน + ระบุคะแนน + นักเรียน แล้วกด "นำไปใช้" ระบบจะใส่คะแนนนี้ให้ทุกคนที่เลือกทันที
+        (ยังไม่บันทึกลงระบบ ต้องกด "บันทึกคะแนนทั้งหมด" อีกครั้งหลังจากนี้)
+      </p>
+
+      <label>รายการคะแนน</label>
+      <select id="bulkScoreItem" onchange="onBulkScoreItemChange()"></select>
+
+      <label>คะแนนที่จะลง</label>
+      <input id="bulkScoreValue" type="number" min="0" step="any" placeholder="เช่น 8">
+
+      <label style="display:flex;align-items:center;gap:6px;margin-top:12px;cursor:pointer;">
+        <input type="checkbox" id="bulkScoreStudentAll" checked onchange="toggleAllBulkScoreStudents()" style="min-height:auto;width:auto;">
+        <span>เลือกนักเรียนทั้งห้อง</span>
+      </label>
+      <div id="bulkScoreStudentList" style="max-height:200px;overflow-y:auto;border:1px solid #eee;border-radius:8px;padding:6px 10px;margin-top:4px;"></div>
+
+      <div class="modal-actions">
+        <button class="secondary" onclick="closeBulkScoreModal()">ปิด</button>
+        <button onclick="applyBulkScore()">นำไปใช้</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- TAB: คุณลักษณะฯ / อ่านคิดฯ -->
+  <div class="tab-content" id="tab-character">
+    <p style="font-size:12px;color:#8b7d92;margin:0 0 10px;">
+      ระดับผลการประเมิน: <b>3</b>=ดีเยี่ยม &nbsp; <b>2</b>=ดี &nbsp; <b>1</b>=ผ่าน &nbsp; <b>0</b>=ไม่ผ่าน
+      — ช่อง "สรุปรวม" คำนวณอัตโนมัติด้วย <b>ฐานนิยม (Mode)</b> ของตัวชี้วัดที่กรอกไว้ ตามหลักสูตรแกนกลางฯ (ถ้าฐานนิยมเท่ากันหลายค่า จะใช้ค่าที่ต่ำกว่า)
+    </p>
+    <div class="toolbar">
+      <button class="warning" onclick="openBulkRatingModal()">📋 ลงคะแนนซ้ำ</button>
+      <button onclick="saveAllCharacterAssessments(this)">💾 บันทึกทั้งหมด</button>
+      <button class="success" onclick="printCharacterAssessment()">🖨️ พิมพ์ / บันทึกเป็น PDF</button>
+    </div>
+    <div id="characterWrapper" style="overflow-x:auto;"></div>
+    <div id="characterEmptyState" class="empty-state" style="display:none;"></div>
+    <div id="characterPrintWrapper" class="print-hidden-target"></div>
+  </div>
+
+  <!-- Modal: ลงคะแนนซ้ำ (คุณลักษณะฯ/อ่านคิดฯ) -->
+  <div class="modal-backdrop" id="bulkRatingModalBackdrop">
+    <div class="modal" style="width:440px;max-height:85vh;overflow-y:auto;">
+      <h2>ลงคะแนนซ้ำ</h2>
+      <p style="font-size:12px;color:#8b7d92;margin:0;">
+        เลือกหมวด + ตัวชี้วัด + นักเรียน + คะแนน แล้วกด "นำไปใช้" ระบบจะใส่คะแนนนี้ให้ทุกช่องที่เลือกทันที
+        (ยังไม่บันทึกลงระบบ ต้องกด "บันทึกทั้งหมด" อีกครั้งหลังจากนี้)
+      </p>
+
+      <label>หมวด</label>
+      <select id="bulkRatingGroup" onchange="onBulkGroupChange()">
+        <option value="char">คุณลักษณะอันพึงประสงค์</option>
+        <option value="read">การอ่าน คิด วิเคราะห์และเขียน</option>
+      </select>
+
+      <label>คะแนนที่จะลง</label>
+      <select id="bulkRatingValue">
+        <option value="3">3 - ดีเยี่ยม</option>
+        <option value="2">2 - ดี</option>
+        <option value="1">1 - ผ่าน</option>
+        <option value="0">0 - ไม่ผ่าน</option>
+      </select>
+
+      <label style="display:flex;align-items:center;gap:6px;margin-top:12px;cursor:pointer;">
+        <input type="checkbox" id="bulkIndicatorAll" checked onchange="toggleAllIndicators()" style="min-height:auto;width:auto;">
+        <span>เลือกตัวชี้วัดทั้งหมด</span>
+      </label>
+      <div id="bulkIndicatorList" style="max-height:130px;overflow-y:auto;border:1px solid #eee;border-radius:8px;padding:6px 10px;margin-top:4px;"></div>
+
+      <label style="display:flex;align-items:center;gap:6px;margin-top:12px;cursor:pointer;">
+        <input type="checkbox" id="bulkStudentAll" checked onchange="toggleAllStudents()" style="min-height:auto;width:auto;">
+        <span>เลือกนักเรียนทั้งห้อง</span>
+      </label>
+      <div id="bulkStudentList" style="max-height:170px;overflow-y:auto;border:1px solid #eee;border-radius:8px;padding:6px 10px;margin-top:4px;"></div>
+
+      <div class="modal-actions">
+        <button class="secondary" onclick="closeBulkRatingModal()">ปิด</button>
+        <button onclick="applyBulkRating()">นำไปใช้</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- TAB: สรุปผล/เกรด -->
+  <div class="tab-content" id="tab-summary">
+    <div class="toolbar">
+      <button class="secondary" onclick="exportGradesToExcel()">📤 Export เป็น Excel</button>
+    </div>
+    <div id="summaryWrapper" style="overflow-x:auto;"></div>
+    <div id="summaryEmptyState" class="empty-state" style="display:none;"></div>
+  </div>
+
+  <!-- TAB: ปพ.5 -->
+  <div class="tab-content" id="tab-por5">
+    <div class="modal" style="width:auto;max-width:520px;box-shadow:none;padding:16px;margin-bottom:16px;">
+      <label>ครูที่ปรึกษาห้องนี้ (ใช้ร่วมกันทุกวิชาของห้อง <span id="por5RoomLabel"></span>) — ใส่ได้สูงสุด 3 คน</label>
+      <input id="advisorNameInput1" placeholder="ครูที่ปรึกษาคนที่ 1" style="margin-top:6px;">
+      <input id="advisorNameInput2" placeholder="ครูที่ปรึกษาคนที่ 2 (ถ้ามี)" style="margin-top:6px;">
+      <div style="display:flex;gap:8px;margin-top:6px;">
+        <input id="advisorNameInput3" placeholder="ครูที่ปรึกษาคนที่ 3 (ถ้ามี)" style="flex:1;">
+        <button onclick="saveAdvisorName(this)">บันทึก</button>
+      </div>
+    </div>
+
+    <div class="toolbar">
+      <button class="success" onclick="window.print()">🖨️ พิมพ์ / บันทึกเป็น PDF</button>
+    </div>
+
+    <div id="por5ReportWrapper"></div>
+    <div id="por5EmptyState" class="empty-state" style="display:none;"></div>
+  </div>
+
+  <!-- Modal: เลือกนักเรียนจากฐานข้อมูลกลาง -->
+  <div class="modal-backdrop" id="selectStudentsModalBackdrop">
+    <div class="modal" style="width:480px;max-height:80vh;display:flex;flex-direction:column;">
+      <h2>เลือกนักเรียนจากฐานข้อมูล</h2>
+      <label>ห้องเรียน</label>
+      <select id="roomSelect" onchange="loadRoomStudents()">
+        <option value="">-- เลือกห้องเรียน --</option>
+      </select>
+
+      <label style="display:flex;align-items:center;gap:6px;margin-top:10px;cursor:pointer;">
+        <input type="checkbox" id="selectAllCheckbox" onchange="toggleSelectAll(this)">
+        <span>เลือกทั้งหมดในห้องนี้</span>
+      </label>
+
+      <div id="roomStudentsList" style="margin-top:8px;overflow-y:auto;flex:1;min-height:120px;max-height:300px;border:1px solid #eee;border-radius:14px;padding:8px;">
+        <p style="color:#aaa;font-size:13px;text-align:center;margin:20px 0;">เลือกห้องเรียนก่อน</p>
+      </div>
+
+      <p style="font-size:12px;color:#888;margin:8px 0 0;">
+        ไม่พบนักเรียนที่ต้องการ? <a href="<?= webAppUrl ?>?page=students">ไปเพิ่มที่ฐานข้อมูลกลางก่อน</a>
+      </p>
+
+      <div class="modal-actions">
+        <button class="secondary" onclick="closeModal('selectStudentsModalBackdrop')">ยกเลิก</button>
+        <button onclick="confirmEnrollSelected(this)">เพิ่มนักเรียนที่เลือก</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: เพิ่ม/แก้ไขรายการคะแนน -->
+  <div class="modal-backdrop" id="itemModalBackdrop">
+    <div class="modal">
+      <h2 id="itemModalTitle">เพิ่มรายการคะแนน</h2>
+      <input type="hidden" id="itemId">
+      <label>ช่วงคะแนน</label>
+      <select id="itemPeriod">
+        <option>ก่อนกลางภาค</option>
+        <option>กลางภาค</option>
+        <option>หลังกลางภาค</option>
+        <option>ปลายภาค</option>
+      </select>
+      <label>ชื่อรายการ</label>
+      <input id="itemName" placeholder="เช่น ใบงานที่ 1, สอบกลางภาค">
+      <label>คะแนนเต็ม</label>
+      <input id="itemMax" type="number" min="1" placeholder="เช่น 10">
+      <label>น้ำหนัก (%)</label>
+      <input id="itemWeight" type="number" min="0" placeholder="เช่น 5">
+      <div class="modal-actions">
+        <button class="secondary" onclick="closeModal('itemModalBackdrop')">ยกเลิก</button>
+        <button onclick="saveScoreItem(this)">บันทึก</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const SUBJECT_ID = '<?= subjectId ?>';
+    const SUBJECT_NAME = '<?= subjectName ?>';
+    let currentItemsData = null;
+
+    function switchTab(tab) {
+      document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
+      document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+      document.getElementById('tab-' + tab).classList.add('active');
+      if (tab === 'scoreitems') loadScoreItems();
+      if (tab === 'scoreentry') loadScoreEntry();
+      if (tab === 'character') loadCharacterAssessment();
+      if (tab === 'summary') loadSummary();
+      if (tab === 'por5') loadPor5();
+    }
+
+    function closeModal(id) { document.getElementById(id).classList.remove('show'); }
+    function onError(err) { alert('เกิดข้อผิดพลาด: ' + (err && err.message ? err.message : err)); }
+
+    function escapeHtml(str) {
+      return String(str).replace(/[&<>"']/g, m => (
+        { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]
+      ));
+    }
+
+    // ---------- นักเรียน ----------
+    function loadStudents() {
+      document.getElementById('studentTableBody').innerHTML = skeletonRows(5, 4);
+      google.script.run.withSuccessHandler(renderStudents).withFailureHandler(onError).getStudentsInSubject(SUBJECT_ID);
+    }
+
+    function renderStudents(data) {
+      const body = document.getElementById('studentTableBody');
+      const empty = document.getElementById('studentEmptyState');
+      body.innerHTML = '';
+      if (!data.length) { empty.style.display = 'block'; return; }
+      empty.style.display = 'none';
+
+      data.forEach(s => {
+        const tr = document.createElement('tr');
+        tr.innerHTML =
+          '<td>' + escapeHtml(s.rollNumber || '-') + '</td>' +
+          '<td>' + escapeHtml(s.studentCode) + '</td>' +
+          '<td>' + escapeHtml(s.name) + '</td>' +
+          '<td>' + escapeHtml(s.classRoom || '-') + '</td>' +
+          '<td><button class="danger" onclick="removeStudent(\'' + s.enrollId + '\')">นำออก</button></td>';
+        body.appendChild(tr);
+      });
+    }
+
+    function openSelectStudentsModal() {
+      document.getElementById('roomStudentsList').innerHTML =
+        '<p style="color:#aaa;font-size:13px;text-align:center;margin:20px 0;">เลือกห้องเรียนก่อน</p>';
+      document.getElementById('roomSelect').value = '';
+      document.getElementById('selectAllCheckbox').checked = false;
+      document.getElementById('selectStudentsModalBackdrop').classList.add('show');
+
+      google.script.run.withSuccessHandler(rooms => {
+        const select = document.getElementById('roomSelect');
+        select.innerHTML = '<option value="">-- เลือกห้องเรียน --</option>';
+        rooms.forEach(r => {
+          const opt = document.createElement('option');
+          opt.value = r;
+          opt.innerText = r;
+          select.appendChild(opt);
+        });
+      }).withFailureHandler(onError).getDistinctClassRooms();
+    }
+
+    function loadRoomStudents() {
+      const room = document.getElementById('roomSelect').value;
+      const list = document.getElementById('roomStudentsList');
+      document.getElementById('selectAllCheckbox').checked = false;
+      if (!room) {
+        list.innerHTML = '<p style="color:#aaa;font-size:13px;text-align:center;margin:20px 0;">เลือกห้องเรียนก่อน</p>';
+        return;
+      }
+      list.innerHTML = '<p style="color:#aaa;font-size:13px;text-align:center;margin:20px 0;">กำลังโหลด...</p>';
+
+      google.script.run.withSuccessHandler(students => {
+        if (!students.length) {
+          list.innerHTML = '<p style="color:#aaa;font-size:13px;text-align:center;margin:20px 0;">ไม่มีนักเรียนในห้องนี้</p>';
+          return;
+        }
+        list.innerHTML = students.map(s => {
+          const rollLabel = s.rollNumber ? ('เลขที่ ' + s.rollNumber + ' - ') : '';
+          if (s.alreadyEnrolled) {
+            return '<div style="padding:6px 4px;color:#aaa;font-size:13px;">' +
+              '<input type="checkbox" disabled> ' + rollLabel + escapeHtml(s.studentCode) + ' - ' + escapeHtml(s.name) +
+              ' <span style="font-size:11px;">(ลงทะเบียนแล้ว)</span></div>';
+          }
+          return '<label style="display:block;padding:6px 4px;font-size:13px;cursor:pointer;">' +
+            '<input type="checkbox" value="' + s.studentId + '" class="room-student-checkbox"> ' +
+            rollLabel + escapeHtml(s.studentCode) + ' - ' + escapeHtml(s.name) + '</label>';
+        }).join('');
+      }).withFailureHandler(onError).getStudentsByClassRoom(room, SUBJECT_ID);
+    }
+
+    function toggleSelectAll(checkbox) {
+      document.querySelectorAll('.room-student-checkbox').forEach(c => c.checked = checkbox.checked);
+    }
+
+    function confirmEnrollSelected(btn) {
+      const checked = document.querySelectorAll('.room-student-checkbox:checked');
+      const ids = Array.from(checked).map(c => c.value);
+      if (!ids.length) { alert('กรุณาเลือกนักเรียนอย่างน้อย 1 คน'); return; }
+
+      setButtonLoading(btn, true);
+      google.script.run.withSuccessHandler(data => {
+        setButtonLoading(btn, false);
+        closeModal('selectStudentsModalBackdrop');
+        renderStudents(data);
+      }).withFailureHandler(err => { setButtonLoading(btn, false); onError(err); }).enrollSelectedStudents(SUBJECT_ID, ids);
+    }
+
+    function removeStudent(enrollId) {
+      if (!confirm('นำนักเรียนคนนี้ออกจากวิชา?')) return;
+      google.script.run.withSuccessHandler(renderStudents).withFailureHandler(onError)
+        .removeStudentFromSubject(enrollId, SUBJECT_ID);
+    }
+
+    // ---------- รายการคะแนน ----------
+    function loadScoreItems() {
+      document.getElementById('periodBlocks').innerHTML = '<div class="spinner-center"><div class="spinner"></div>กำลังโหลด...</div>';
+      google.script.run.withSuccessHandler(renderScoreItems).withFailureHandler(onError).getScoreItems(SUBJECT_ID);
+    }
+
+    function renderScoreItems(data) {
+      currentItemsData = data;
+      const container = document.getElementById('periodBlocks');
+      container.innerHTML = '';
+
+      data.periods.forEach(period => {
+        const items = data.items.filter(i => i.Period === period);
+        const weight = data.weightByPeriod[period] || 0;
+
+        const block = document.createElement('div');
+        block.className = 'period-block';
+
+        let rows = items.map(i =>
+          '<tr>' +
+          '<td>' + escapeHtml(i.ItemName) + '</td>' +
+          '<td>' + i.MaxScore + '</td>' +
+          '<td>' + i.Weight + '%</td>' +
+          '<td>' +
+          '<button class="secondary" onclick="openEditItemModal(\'' + i.ItemID + '\')">แก้ไข</button> ' +
+          '<button class="danger" onclick="removeScoreItem(\'' + i.ItemID + '\')">ลบ</button>' +
+          '</td></tr>'
+        ).join('');
+
+        if (!items.length) rows = '<tr><td colspan="4" style="color:#999;">ยังไม่มีรายการ</td></tr>';
+
+        const badgeClass = weight === 100 ? 'ok' : (weight > 100 ? 'warn' : '');
+        block.innerHTML =
+          '<h4>' + period + ' <span class="weight-badge ' + badgeClass + '">รวม ' + weight + '%</span></h4>' +
+          '<table><thead><tr><th>รายการ</th><th>คะแนนเต็ม</th><th>น้ำหนัก</th><th></th></tr></thead>' +
+          '<tbody>' + rows + '</tbody></table>';
+
+        container.appendChild(block);
+      });
+
+      const totalDiv = document.createElement('div');
+      totalDiv.className = 'total-weight';
+      const totalBadgeClass = data.totalWeight === 100 ? 'ok' : 'warn';
+      totalDiv.innerHTML = 'น้ำหนักรวมทั้งหมด: <span class="weight-badge ' + totalBadgeClass + '">' +
+        data.totalWeight + '% / 100%</span>';
+      container.appendChild(totalDiv);
+    }
+
+    function openAddItemModal() {
+      document.getElementById('itemModalTitle').innerText = 'เพิ่มรายการคะแนน';
+      document.getElementById('itemId').value = '';
+      document.getElementById('itemPeriod').value = 'ก่อนกลางภาค';
+      document.getElementById('itemName').value = '';
+      document.getElementById('itemMax').value = '';
+      document.getElementById('itemWeight').value = '';
+      document.getElementById('itemModalBackdrop').classList.add('show');
+    }
+
+    function openEditItemModal(itemId) {
+      const item = currentItemsData.items.find(i => i.ItemID === itemId);
+      if (!item) return;
+      document.getElementById('itemModalTitle').innerText = 'แก้ไขรายการคะแนน';
+      document.getElementById('itemId').value = item.ItemID;
+      document.getElementById('itemPeriod').value = item.Period;
+      document.getElementById('itemName').value = item.ItemName;
+      document.getElementById('itemMax').value = item.MaxScore;
+      document.getElementById('itemWeight').value = item.Weight;
+      document.getElementById('itemModalBackdrop').classList.add('show');
+    }
+
+    function saveScoreItem(btn) {
+      const form = {
+        itemId: document.getElementById('itemId').value,
+        subjectId: SUBJECT_ID,
+        period: document.getElementById('itemPeriod').value,
+        itemName: document.getElementById('itemName').value.trim(),
+        maxScore: document.getElementById('itemMax').value,
+        weight: document.getElementById('itemWeight').value
+      };
+      if (!form.itemName || !form.maxScore || form.weight === '') { alert('กรุณากรอกข้อมูลให้ครบ'); return; }
+
+      setButtonLoading(btn, true);
+      const handler = data => { setButtonLoading(btn, false); closeModal('itemModalBackdrop'); renderScoreItems(data); };
+      const fail = err => { setButtonLoading(btn, false); onError(err); };
+      if (form.itemId) {
+        google.script.run.withSuccessHandler(handler).withFailureHandler(fail).updateScoreItem(form);
+      } else {
+        google.script.run.withSuccessHandler(handler).withFailureHandler(fail).addScoreItem(form);
+      }
+    }
+
+    function removeScoreItem(itemId) {
+      if (!confirm('ยืนยันลบรายการคะแนนนี้?')) return;
+      google.script.run.withSuccessHandler(renderScoreItems).withFailureHandler(onError)
+        .deleteScoreItem(itemId, SUBJECT_ID);
+    }
+
+    // ---------- กรอกคะแนน ----------
+    function loadScoreEntry() {
+      document.getElementById('scoreEntryWrapper').innerHTML =
+        '<table><tbody>' + skeletonRows(6, 6) + '</tbody></table>';
+      google.script.run.withSuccessHandler(renderScoreEntry).withFailureHandler(onError).getScoreEntryData(SUBJECT_ID);
+    }
+
+    let currentScoreEntryData = null;
+
+    function renderScoreEntry(data) {
+      const wrapper = document.getElementById('scoreEntryWrapper');
+      const empty = document.getElementById('scoreEntryEmptyState');
+      wrapper.innerHTML = '';
+
+      if (!data.students.length) {
+        empty.style.display = 'block';
+        empty.innerText = 'ยังไม่มีนักเรียนในวิชานี้ กรุณาเพิ่มนักเรียนก่อน (แท็บ "รายชื่อนักเรียน")';
+        return;
+      }
+      if (!data.items.length) {
+        empty.style.display = 'block';
+        empty.innerText = 'ยังไม่มีรายการคะแนน กรุณาเพิ่มก่อน (แท็บ "รายการคะแนน")';
+        return;
+      }
+      empty.style.display = 'none';
+
+      // จัดเรียงรายการคะแนนตามช่วงก่อนเสมอ (สำคัญมาก: header กับ body ต้องใช้ลำดับเดียวกันเป๊ะๆ)
+      // ถ้าใช้ data.items แบบดิบ (ตามลำดับที่บันทึกในชีต) โดยไม่จัดกลุ่ม จะทำให้หัวตารางกับช่องกรอกเหลื่อมกัน
+      const orderedItems = [];
+      data.periods.forEach(period => {
+        data.items.filter(i => i.Period === period).forEach(i => orderedItems.push(i));
+      });
+
+      // แถวหัวตารางที่ 1: ชื่อช่วง (colspan ตามจำนวนรายการในช่วงนั้น)
+      let periodHeaderRow = '<th rowspan="2">เลขที่</th><th rowspan="2">รหัส</th><th rowspan="2">ชื่อ-สกุล</th>';
+      let itemHeaderRow = '';
+      data.periods.forEach(period => {
+        const items = orderedItems.filter(i => i.Period === period);
+        if (!items.length) return;
+        periodHeaderRow += '<th colspan="' + items.length + '" style="text-align:center;">' + period + '</th>';
+        items.forEach(i => {
+          itemHeaderRow += '<th style="text-align:center;">' + escapeHtml(i.ItemName) +
+            '<br><span style="font-weight:normal;color:#888;">(เต็ม ' + i.MaxScore + ')</span></th>';
+        });
+      });
+
+      let bodyRows = '';
+      data.students.forEach((stu, rowIdx) => {
+        bodyRows += '<tr><td>' + escapeHtml(stu.rollNumber || '-') + '</td><td>' + escapeHtml(stu.studentCode) + '</td><td>' + escapeHtml(stu.name) + '</td>';
+        orderedItems.forEach((item, colIdx) => {
+          const studentScores = data.scores[stu.studentId];
+          const raw = studentScores ? studentScores[item.ItemID] : '';
+          const value = (raw === undefined || raw === null) ? '' : raw;
+          bodyRows +=
+            '<td><input type="number" min="0" max="' + item.MaxScore + '" step="any" ' +
+            'style="width:70px;padding:6px;border:1px solid #ecdff5;border-radius:8px;" ' +
+            'data-student="' + stu.studentId + '" data-item="' + item.ItemID + '" data-max="' + item.MaxScore + '" ' +
+            'data-row="' + rowIdx + '" data-col="' + colIdx + '" ' +
+            'value="' + value + '" oninput="validateScoreInput(this)" onkeydown="handleScoreCellKeydown(event, this)"></td>';
+        });
+        bodyRows += '</tr>';
+      });
+
+      wrapper.innerHTML =
+        '<table><thead><tr>' + periodHeaderRow + '</tr><tr>' + itemHeaderRow + '</tr></thead>' +
+        '<tbody>' + bodyRows + '</tbody></table>';
+
+      // เช็คช่องที่มีค่าเกินคะแนนเต็มอยู่แล้วตั้งแต่โหลดครั้งแรก (เผื่อมีข้อมูลเก่าที่ผิดอยู่)
+      wrapper.querySelectorAll('input[data-max]').forEach(inp => validateScoreInput(inp));
+
+      currentScoreEntryData = { students: data.students, orderedItems: orderedItems };
+    }
+
+    function validateScoreInput(input) {
+      const EPSILON = 0.001; // กันปัญหา floating-point เช่น 20.00000000000002 ไม่ให้ถูกตัดสินว่าเกินคะแนนเต็ม
+      const max = Number(input.dataset.max);
+      const val = input.value === '' ? null : Number(input.value);
+      const invalid = val !== null && (isNaN(val) || val < -EPSILON || val > max + EPSILON);
+      const isLow = !invalid && val !== null && max > 0 && val < max / 2;
+
+      if (invalid) {
+        input.style.borderColor = '#fb7185';
+        input.style.background = '#ffe4e6';
+        input.style.color = '#111';
+        input.title = 'คะแนนเต็มของรายการนี้คือ ' + max;
+      } else if (isLow) {
+        input.style.borderColor = '#fb7185';
+        input.style.background = '#fb7185';
+        input.style.color = '#fff';
+        input.title = 'คะแนนนี้ต่ำกว่าครึ่งหนึ่งของคะแนนเต็ม (' + max + ')';
+      } else {
+        input.style.borderColor = '#e5d9ee';
+        input.style.background = '#fff';
+        input.style.color = '#111';
+        input.title = '';
+      }
+    }
+
+    // กด Enter แล้วย้าย focus ไปแถวถัดไปคอลัมน์เดิม (เหมือนกรอกคะแนนใน Excel/Google Sheets)
+    // ถ้าเป็นแถวสุดท้ายแล้ว จะย้ายไปแถวแรกของคอลัมน์ถัดไปแทน
+    function handleScoreCellKeydown(event, input) {
+      if (event.key !== 'Enter') return;
+      event.preventDefault();
+
+      const row = Number(input.dataset.row);
+      const col = Number(input.dataset.col);
+      const wrapper = document.getElementById('scoreEntryWrapper');
+
+      let next = wrapper.querySelector('input[data-row="' + (row + 1) + '"][data-col="' + col + '"]');
+      if (!next) {
+        next = wrapper.querySelector('input[data-row="0"][data-col="' + (col + 1) + '"]');
+      }
+      if (next) {
+        next.focus();
+        next.select();
+      }
+    }
+
+    function saveAllScores(btn) {
+      const inputs = document.querySelectorAll('#scoreEntryWrapper input[data-student]');
+
+      const hasInvalid = Array.from(inputs).some(inp => {
+        const EPSILON = 0.001;
+        const max = Number(inp.dataset.max);
+        const val = inp.value === '' ? null : Number(inp.value);
+        return val !== null && (isNaN(val) || val < -EPSILON || val > max + EPSILON);
+      });
+      if (hasInvalid) {
+        alert('มีช่องที่กรอกคะแนนเกินคะแนนเต็ม หรือติดลบอยู่ (ขอบสีแดง) กรุณาแก้ไขก่อนบันทึก');
+        return;
+      }
+
+      const scores = [];
+      inputs.forEach(inp => {
+        scores.push({
+          studentId: inp.dataset.student,
+          itemId: inp.dataset.item,
+          rawScore: inp.value === '' ? '' : Number(inp.value)
+        });
+      });
+      if (!scores.length) return;
+
+      setButtonLoading(btn, true);
+      showOverlay('กำลังบันทึกคะแนน...');
+      google.script.run
+        .withSuccessHandler(() => { setButtonLoading(btn, false); hideOverlay(); alert('บันทึกคะแนนเรียบร้อยแล้ว'); })
+        .withFailureHandler(err => { setButtonLoading(btn, false); hideOverlay(); onError(err); })
+        .saveScores(SUBJECT_ID, scores);
+    }
+
+    // ---------- ลงคะแนนซ้ำ (bulk fill กรอกคะแนน) ----------
+    function openBulkScoreModal() {
+      if (!currentScoreEntryData || !currentScoreEntryData.students.length || !currentScoreEntryData.orderedItems.length) {
+        alert('ยังไม่มีนักเรียนหรือรายการคะแนนในวิชานี้');
+        return;
+      }
+
+      const itemSelect = document.getElementById('bulkScoreItem');
+      itemSelect.innerHTML = currentScoreEntryData.orderedItems.map(item =>
+        '<option value="' + item.ItemID + '" data-max="' + item.MaxScore + '">' +
+        escapeHtml(item.Period) + ' - ' + escapeHtml(item.ItemName) + ' (เต็ม ' + item.MaxScore + ')</option>'
+      ).join('');
+
+      document.getElementById('bulkScoreValue').value = '';
+      document.getElementById('bulkScoreStudentAll').checked = true;
+      onBulkScoreItemChange();
+      renderBulkScoreStudentList();
+      document.getElementById('bulkScoreModalBackdrop').classList.add('show');
+    }
+
+    function closeBulkScoreModal() {
+      document.getElementById('bulkScoreModalBackdrop').classList.remove('show');
+    }
+
+    function onBulkScoreItemChange() {
+      const itemSelect = document.getElementById('bulkScoreItem');
+      const selected = itemSelect.options[itemSelect.selectedIndex];
+      const max = selected ? selected.dataset.max : '';
+      document.getElementById('bulkScoreValue').max = max;
+      document.getElementById('bulkScoreValue').placeholder = 'เต็ม ' + max;
+    }
+
+    function renderBulkScoreStudentList() {
+      const allChecked = document.getElementById('bulkScoreStudentAll').checked;
+      document.getElementById('bulkScoreStudentList').innerHTML = currentScoreEntryData.students.map(stu =>
+        '<label style="display:block;font-size:13px;padding:2px 0;cursor:pointer;">' +
+        '<input type="checkbox" class="bulk-score-student-cb" value="' + stu.studentId + '"' + (allChecked ? ' checked' : '') + ' style="min-height:auto;width:auto;"> ' +
+        escapeHtml(stu.rollNumber || '-') + '. ' + escapeHtml(stu.name) + '</label>'
+      ).join('');
+    }
+
+    function toggleAllBulkScoreStudents() {
+      const checked = document.getElementById('bulkScoreStudentAll').checked;
+      document.querySelectorAll('.bulk-score-student-cb').forEach(cb => cb.checked = checked);
+    }
+
+    function applyBulkScore() {
+      const itemSelect = document.getElementById('bulkScoreItem');
+      const itemId = itemSelect.value;
+      const value = document.getElementById('bulkScoreValue').value;
+      const studentIds = Array.from(document.querySelectorAll('.bulk-score-student-cb:checked')).map(cb => cb.value);
+
+      if (value === '') { alert('กรุณาระบุคะแนนที่จะลง'); return; }
+      if (!studentIds.length) { alert('กรุณาเลือกนักเรียนอย่างน้อย 1 คน'); return; }
+
+      const wrapper = document.getElementById('scoreEntryWrapper');
+      studentIds.forEach(studentId => {
+        const el = wrapper.querySelector('input[data-student="' + studentId + '"][data-item="' + itemId + '"]');
+        if (el) {
+          el.value = value;
+          validateScoreInput(el);
+        }
+      });
+
+      closeBulkScoreModal();
+    }
+
+    // ---------- คุณลักษณะฯ / อ่านคิดฯ ----------
+    let currentCharacterData = null;
+    const RATING_LABELS_ = { 3: 'ดีเยี่ยม', 2: 'ดี', 1: 'ผ่าน', 0: 'ไม่ผ่าน' };
+
+    function loadCharacterAssessment() {
+      document.getElementById('characterWrapper').innerHTML =
+        '<table><tbody>' + skeletonRows(8, 6) + '</tbody></table>';
+      google.script.run.withSuccessHandler(renderCharacterAssessment).withFailureHandler(onError).getCharacterAssessmentData(SUBJECT_ID);
+    }
+
+    function renderCharacterAssessment(data) {
+      currentCharacterData = data;
+      const wrapper = document.getElementById('characterWrapper');
+      const empty = document.getElementById('characterEmptyState');
+
+      if (!data.students.length) {
+        wrapper.innerHTML = '';
+        empty.style.display = 'block';
+        empty.innerText = 'ยังไม่มีนักเรียนในวิชานี้';
+        return;
+      }
+      empty.style.display = 'none';
+
+      let header = '<tr><th rowspan="2">เลขที่</th><th rowspan="2">รหัส</th><th rowspan="2">ชื่อ-สกุล</th>' +
+        '<th colspan="' + (data.characterIndicators.length + 1) + '">คุณลักษณะอันพึงประสงค์</th>' +
+        '<th colspan="' + (data.readThinkIndicators.length + 1) + '">การอ่าน คิด วิเคราะห์และเขียน</th></tr><tr>';
+      data.characterIndicators.forEach(ind => header += '<th title="' + escapeHtml(ind.label) + '">' + ind.key.replace('Char', '') + '</th>');
+      header += '<th>สรุปรวม</th>';
+      data.readThinkIndicators.forEach(ind => header += '<th title="' + escapeHtml(ind.label) + '">' + ind.key.replace('Read', '') + '</th>');
+      header += '<th>สรุปรวม</th></tr>';
+
+      let rows = data.students.map((stu, rowIdx) => {
+        let cells = '<td>' + escapeHtml(stu.rollNumber || '-') + '</td><td>' + escapeHtml(stu.studentCode) + '</td><td>' + escapeHtml(stu.name) + '</td>';
+        data.characterIndicators.forEach(ind => cells += '<td>' + buildRatingSelect_(stu.studentId, 'char', ind.key, stu.charValues[ind.key]) + '</td>');
+        cells += '<td><b id="charOverall_' + stu.studentId + '">' + (stu.charOverall || '-') + '</b></td>';
+        data.readThinkIndicators.forEach(ind => cells += '<td>' + buildRatingSelect_(stu.studentId, 'read', ind.key, stu.readValues[ind.key]) + '</td>');
+        cells += '<td><b id="readOverall_' + stu.studentId + '">' + (stu.readOverall || '-') + '</b></td>';
+        return '<tr>' + cells + '</tr>';
+      }).join('');
+
+      wrapper.innerHTML = '<table style="width:auto;"><thead>' + header + '</thead><tbody>' + rows + '</tbody></table>';
+    }
+
+    function buildRatingSelect_(studentId, group, key, currentVal) {
+      const opts = ['', '3', '2', '1', '0'];
+      const optionsHtml = opts.map(o => {
+        const selected = String(currentVal) === o ? ' selected' : '';
+        const label = o === '' ? '-' : o;
+        return '<option value="' + o + '"' + selected + '>' + label + '</option>';
+      }).join('');
+      return '<select style="width:52px;padding:2px;border-radius:6px;border:1px solid #ecdff5;" ' +
+        'data-student="' + studentId + '" data-group="' + group + '" data-key="' + key + '" ' +
+        'onchange="onRatingChange_(this)">' + optionsHtml + '</select>';
+    }
+
+    // คำนวณ "ฐานนิยม" (Mode) เหมือนฝั่ง server เป๊ะๆ ถ้าฐานนิยมเท่ากันหลายค่า ใช้ค่าที่ต่ำกว่า
+    function computeOverallRatingClient_(values) {
+      if (!values.length) return '-';
+      const freq = {};
+      values.forEach(v => freq[v] = (freq[v] || 0) + 1);
+      let maxFreq = 0;
+      Object.keys(freq).forEach(k => { if (freq[k] > maxFreq) maxFreq = freq[k]; });
+      const modes = Object.keys(freq).filter(k => freq[k] === maxFreq).map(Number);
+      const chosen = Math.min.apply(null, modes);
+      return RATING_LABELS_[chosen];
+    }
+
+    // อัปเดต "สรุปรวม" ให้เห็นทันทีที่หน้าจอ (ค่าจริงจะคำนวณซ้ำอีกทีตอนกดบันทึกที่ฝั่ง server)
+    function onRatingChange_(select) {
+      const studentId = select.dataset.student;
+      const group = select.dataset.group;
+      const wrapper = document.getElementById('characterWrapper');
+      const selector = 'select[data-student="' + studentId + '"][data-group="' + group + '"]';
+      const values = Array.from(wrapper.querySelectorAll(selector))
+        .map(s => s.value)
+        .filter(v => v !== '')
+        .map(Number);
+
+      const overallEl = document.getElementById((group === 'char' ? 'charOverall_' : 'readOverall_') + studentId);
+      if (!overallEl) return;
+      overallEl.innerText = computeOverallRatingClient_(values);
+    }
+
+    function saveAllCharacterAssessments(btn) {
+      if (!currentCharacterData) return;
+      const wrapper = document.getElementById('characterWrapper');
+
+      const rows = currentCharacterData.students.map(stu => {
+        const charValues = {};
+        currentCharacterData.characterIndicators.forEach(ind => {
+          const el = wrapper.querySelector('select[data-student="' + stu.studentId + '"][data-group="char"][data-key="' + ind.key + '"]');
+          charValues[ind.key] = el && el.value !== '' ? Number(el.value) : '';
+        });
+        const readValues = {};
+        currentCharacterData.readThinkIndicators.forEach(ind => {
+          const el = wrapper.querySelector('select[data-student="' + stu.studentId + '"][data-group="read"][data-key="' + ind.key + '"]');
+          readValues[ind.key] = el && el.value !== '' ? Number(el.value) : '';
+        });
+        return { studentId: stu.studentId, charValues: charValues, readValues: readValues };
+      });
+
+      setButtonLoading(btn, true);
+      google.script.run
+        .withSuccessHandler(data => { setButtonLoading(btn, false); renderCharacterAssessment(data); alert('บันทึกเรียบร้อยแล้ว'); })
+        .withFailureHandler(err => { setButtonLoading(btn, false); onError(err); })
+        .saveCharacterAssessments(SUBJECT_ID, rows);
+    }
+
+    // ---------- ลงคะแนนซ้ำ (bulk fill) ----------
+    function openBulkRatingModal() {
+      if (!currentCharacterData || !currentCharacterData.students.length) {
+        alert('ยังไม่มีนักเรียนในวิชานี้');
+        return;
+      }
+      document.getElementById('bulkRatingGroup').value = 'char';
+      document.getElementById('bulkRatingValue').value = '3';
+      document.getElementById('bulkIndicatorAll').checked = true;
+      document.getElementById('bulkStudentAll').checked = true;
+      renderBulkIndicatorList();
+      renderBulkStudentList();
+      document.getElementById('bulkRatingModalBackdrop').classList.add('show');
+    }
+
+    function closeBulkRatingModal() {
+      document.getElementById('bulkRatingModalBackdrop').classList.remove('show');
+    }
+
+    function onBulkGroupChange() {
+      document.getElementById('bulkIndicatorAll').checked = true;
+      renderBulkIndicatorList();
+    }
+
+    function renderBulkIndicatorList() {
+      const group = document.getElementById('bulkRatingGroup').value;
+      const indicators = group === 'char' ? currentCharacterData.characterIndicators : currentCharacterData.readThinkIndicators;
+      const allChecked = document.getElementById('bulkIndicatorAll').checked;
+      document.getElementById('bulkIndicatorList').innerHTML = indicators.map(ind =>
+        '<label style="display:block;font-size:13px;padding:2px 0;cursor:pointer;">' +
+        '<input type="checkbox" class="bulk-indicator-cb" value="' + ind.key + '"' + (allChecked ? ' checked' : '') + ' style="min-height:auto;width:auto;"> ' +
+        escapeHtml(ind.label) + '</label>'
+      ).join('');
+    }
+
+    function toggleAllIndicators() {
+      const checked = document.getElementById('bulkIndicatorAll').checked;
+      document.querySelectorAll('.bulk-indicator-cb').forEach(cb => cb.checked = checked);
+    }
+
+    function renderBulkStudentList() {
+      const allChecked = document.getElementById('bulkStudentAll').checked;
+      document.getElementById('bulkStudentList').innerHTML = currentCharacterData.students.map(stu =>
+        '<label style="display:block;font-size:13px;padding:2px 0;cursor:pointer;">' +
+        '<input type="checkbox" class="bulk-student-cb" value="' + stu.studentId + '"' + (allChecked ? ' checked' : '') + ' style="min-height:auto;width:auto;"> ' +
+        escapeHtml(stu.rollNumber || '-') + '. ' + escapeHtml(stu.name) + '</label>'
+      ).join('');
+    }
+
+    function toggleAllStudents() {
+      const checked = document.getElementById('bulkStudentAll').checked;
+      document.querySelectorAll('.bulk-student-cb').forEach(cb => cb.checked = checked);
+    }
+
+    function applyBulkRating() {
+      const group = document.getElementById('bulkRatingGroup').value;
+      const value = document.getElementById('bulkRatingValue').value;
+      const indicatorKeys = Array.from(document.querySelectorAll('.bulk-indicator-cb:checked')).map(cb => cb.value);
+      const studentIds = Array.from(document.querySelectorAll('.bulk-student-cb:checked')).map(cb => cb.value);
+
+      if (!indicatorKeys.length) { alert('กรุณาเลือกตัวชี้วัดอย่างน้อย 1 ข้อ'); return; }
+      if (!studentIds.length) { alert('กรุณาเลือกนักเรียนอย่างน้อย 1 คน'); return; }
+
+      const wrapper = document.getElementById('characterWrapper');
+      studentIds.forEach(studentId => {
+        indicatorKeys.forEach(key => {
+          const el = wrapper.querySelector('select[data-student="' + studentId + '"][data-group="' + group + '"][data-key="' + key + '"]');
+          if (el) el.value = value;
+        });
+        // อัปเดตช่อง "สรุปรวม" ของนักเรียนคนนี้ในหมวดที่เพิ่งแก้ ให้เห็นผลทันที
+        const anyEl = wrapper.querySelector('select[data-student="' + studentId + '"][data-group="' + group + '"]');
+        if (anyEl) onRatingChange_(anyEl);
+      });
+
+      closeBulkRatingModal();
+    }
+
+    // ---------- พิมพ์ / บันทึกเป็น PDF (ตามรูปแบบไฟล์ Excel ต้นฉบับ) ----------
+    function computeOverallNumber_(values) {
+      if (!values.length) return '';
+      const freq = {};
+      values.forEach(v => freq[v] = (freq[v] || 0) + 1);
+      let maxFreq = 0;
+      Object.keys(freq).forEach(k => { if (freq[k] > maxFreq) maxFreq = freq[k]; });
+      const modes = Object.keys(freq).filter(k => freq[k] === maxFreq).map(Number);
+      return Math.min.apply(null, modes);
+    }
+
+    function printCharacterAssessment() {
+      if (!currentCharacterData || !currentCharacterData.students.length) {
+        alert('ยังไม่มีนักเรียนในวิชานี้ ไม่สามารถพิมพ์รายงานได้');
+        return;
+      }
+
+      showOverlay('กำลังเตรียมรายงาน...');
+      google.script.run
+        .withSuccessHandler(por5Data => {
+          google.script.run
+            .withSuccessHandler(settings => renderCharacterPrintView(por5Data.subject, settings, por5Data.teacherName))
+            .withFailureHandler(err => { hideOverlay(); onError(err); })
+            .getSettings();
+        })
+        .withFailureHandler(err => { hideOverlay(); onError(err); })
+        .getPor5Report(SUBJECT_ID);
+    }
+
+    function renderCharacterPrintView(subjectInfo, settings, teacherName) {
+      const data = currentCharacterData;
+      const roomForLabel = String(subjectInfo.classRoom || '-').replace(/^ม\.?\s*/, '');
+
+      function rotatedHeader_(text, fontSize) {
+        return '<div style="writing-mode:vertical-rl;transform:rotate(180deg);white-space:nowrap;margin:0 auto;font-size:' +
+          (fontSize || 11) + 'px;font-weight:normal;">' + escapeHtml(text) + '</div>';
+      }
+
+      const totalCols = 3 + data.characterIndicators.length + 1 + data.readThinkIndicators.length + 1;
+      const halfCols = Math.ceil(totalCols / 2);
+
+      // แถวหัวข้อ + ข้อมูลวิชา ทำเป็นแถวใน <thead> เดียวกับตารางหลัก เพื่อให้เบราว์เซอร์พิมพ์ซ้ำให้เองทุกหน้า
+      let thead =
+        '<tr><th colspan="' + totalCols + '" style="border:none;font-size:15px;font-weight:600;padding:4px;">' +
+        'แบบประเมินคุณลักษณะอันพึงประสงค์และการอ่าน คิด วิเคราะห์และเขียน</th></tr>' +
+        '<tr><td colspan="' + halfCols + '" style="border:none;text-align:left;font-size:13px;font-weight:normal;padding:2px 8px;">' +
+        'รายวิชา' + escapeHtml(subjectInfo.subjectName) + ' &nbsp; รหัสวิชา ' + escapeHtml(subjectInfo.subjectCode || '-') + '</td>' +
+        '<td colspan="' + (totalCols - halfCols) + '" style="border:none;text-align:left;font-size:13px;font-weight:normal;padding:2px 8px;">' +
+        'ชั้นมัธยมศึกษาปีที่ ' + escapeHtml(roomForLabel) + '</td></tr>' +
+        '<tr><td colspan="' + halfCols + '" style="border:none;text-align:left;font-size:13px;font-weight:normal;padding:2px 8px 10px;">' +
+        'ภาคเรียนที่ ' + escapeHtml(subjectInfo.semester || '-') + ' ปีการศึกษา ' + escapeHtml(subjectInfo.academicYear || '-') + '</td>' +
+        '<td colspan="' + (totalCols - halfCols) + '" style="border:none;text-align:left;font-size:13px;font-weight:normal;padding:2px 8px 10px;">' +
+        'ครูผู้สอน ' + escapeHtml(teacherName || '-') + '</td></tr>';
+
+      thead += '<tr><th rowspan="2" style="vertical-align:bottom;">เลขที่</th>' +
+        '<th rowspan="2" style="vertical-align:bottom;">' + rotatedHeader_('เลขประจำตัว', 12) + '</th>' +
+        '<th rowspan="2" style="vertical-align:bottom;text-align:left;">ชื่อ - สกุลนักเรียน</th>' +
+        '<th colspan="' + (data.characterIndicators.length + 1) + '" style="font-size:11px;white-space:nowrap;">ผลประเมินคุณลักษณะอันพึงประสงค์</th>' +
+        '<th colspan="' + (data.readThinkIndicators.length + 1) + '" style="font-size:11px;white-space:nowrap;">ผลประเมินการอ่าน คิด วิเคราะห์และเขียน</th></tr><tr>';
+      data.characterIndicators.forEach(ind => thead += '<th style="vertical-align:bottom;">' + rotatedHeader_(ind.label) + '</th>');
+      thead += '<th style="vertical-align:bottom;">' + rotatedHeader_('สรุปรวม') + '</th>';
+      data.readThinkIndicators.forEach(ind => thead += '<th style="vertical-align:bottom;">' + rotatedHeader_(ind.label) + '</th>');
+      thead += '<th style="vertical-align:bottom;">' + rotatedHeader_('สรุปรวม') + '</th></tr>';
+
+      const rows = data.students.map(stu => {
+        let cells = '<td>' + escapeHtml(stu.rollNumber || '-') + '</td><td>' + escapeHtml(stu.studentCode) + '</td>' +
+          '<td style="text-align:left;">' + escapeHtml(stu.name) + '</td>';
+
+        const charVals = data.characterIndicators
+          .map(ind => stu.charValues[ind.key])
+          .filter(v => v !== '' && v !== undefined && v !== null);
+        data.characterIndicators.forEach(ind => {
+          const v = stu.charValues[ind.key];
+          cells += '<td>' + (v === '' || v === undefined || v === null ? '-' : v) + '</td>';
+        });
+        cells += '<td><b>' + (charVals.length ? computeOverallNumber_(charVals) : '-') + '</b></td>';
+
+        const readVals = data.readThinkIndicators
+          .map(ind => stu.readValues[ind.key])
+          .filter(v => v !== '' && v !== undefined && v !== null);
+        data.readThinkIndicators.forEach(ind => {
+          const v = stu.readValues[ind.key];
+          cells += '<td>' + (v === '' || v === undefined || v === null ? '-' : v) + '</td>';
+        });
+        cells += '<td><b>' + (readVals.length ? computeOverallNumber_(readVals) : '-') + '</b></td>';
+
+        return '<tr>' + cells + '</tr>';
+      }).join('');
+
+      const legendPairs = [
+        ['เกณฑ์การประเมินคุณลักษณะอันพึงประสงค์', 'เกณฑ์การประเมินการอ่าน คิด วิเคราะห์และเขียน', true],
+        ['3 = ดีเยี่ยม', '3 = ดีเยี่ยม', false],
+        ['2 = ดี', '2 = ดี', false],
+        ['1 = ผ่านเกณฑ์', '1 = ผ่านเกณฑ์', false],
+        ['0 = ไม่ผ่านเกณฑ์/ควรปรับปรุง', '0 = ไม่ผ่านเกณฑ์', false]
+      ];
+      const legendRows = legendPairs.map((pair, idx) => {
+        const weight = pair[2] ? 'font-weight:600;' : 'font-weight:normal;';
+        const topPad = idx === 0 ? '16px' : '2px';
+        return '<tr><td colspan="' + halfCols + '" style="border:none;text-align:left;font-size:13px;' + weight + 'padding:' + topPad + ' 4px 2px;">' + pair[0] + '</td>' +
+          '<td colspan="' + (totalCols - halfCols) + '" style="border:none;text-align:left;font-size:13px;' + weight + 'padding:' + topPad + ' 4px 2px;">' + pair[1] + '</td></tr>';
+      }).join('');
+
+      const indicatorColCount = data.characterIndicators.length + 1 + data.readThinkIndicators.length + 1;
+      const indicatorColWidth = (60 / indicatorColCount).toFixed(2);
+      let colgroup = '<colgroup><col style="width:6%;"><col style="width:8%;"><col style="width:26%;">';
+      for (let i = 0; i < indicatorColCount; i++) colgroup += '<col style="width:' + indicatorColWidth + '%;">';
+      colgroup += '</colgroup>';
+
+      let html = '<div class="por5-page" style="position:relative;">';
+      html += '<table class="data-table" style="font-size:11px;table-layout:fixed;">' + colgroup +
+        '<thead>' + thead + '</thead><tbody>' + rows + legendRows + '</tbody></table>';
+
+      html += '</div>';
+
+      document.getElementById('characterPrintWrapper').innerHTML = html;
+      hideOverlay();
+      window.print();
+    }
+
+    // ---------- สรุปผล/เกรด ----------
+    let currentSummaryData = null;
+
+    function loadSummary() {
+      document.getElementById('summaryWrapper').innerHTML =
+        '<table><tbody>' + skeletonRows(7, 6) + '</tbody></table>';
+      google.script.run.withSuccessHandler(renderSummary).withFailureHandler(onError).getGradeSummary(SUBJECT_ID);
+    }
+
+    function renderSummary(data) {
+      currentSummaryData = data;
+      const wrapper = document.getElementById('summaryWrapper');
+      const empty = document.getElementById('summaryEmptyState');
+      wrapper.innerHTML = '';
+
+      if (!data.rows.length) {
+        empty.style.display = 'block';
+        empty.innerText = 'ยังไม่มีนักเรียนในวิชานี้';
+        return;
+      }
+      empty.style.display = 'none';
+
+      let header = '<th>เลขที่</th><th>รหัส</th><th>ชื่อ-สกุล</th>';
+      data.periods.forEach(p => header += '<th style="text-align:center;">' + p + '</th>');
+      header += '<th style="text-align:center;">รวม</th><th style="text-align:center;">เกรด</th>' +
+        '<th style="text-align:center;">คุณลักษณะฯ</th><th style="text-align:center;">อ่านคิดวิเคราะห์เขียน</th>';
+
+      let rows = data.rows.map(r => {
+        let cells = '<td>' + escapeHtml(r.rollNumber || '-') + '</td><td>' + escapeHtml(r.studentCode) + '</td><td>' + escapeHtml(r.name) + '</td>';
+        data.periods.forEach(p => cells += '<td style="text-align:center;">' + (r.periodScores[p] || 0) + '</td>');
+        cells += '<td style="text-align:center;font-weight:600;">' + r.total + '</td>' +
+          '<td style="text-align:center;">' + buildGradeSelect(r) + '</td>' +
+          '<td style="text-align:center;">' + escapeHtml(r.desiredCharacteristics || '-') + '</td>' +
+          '<td style="text-align:center;">' + escapeHtml(r.readThinkWrite || '-') + '</td>';
+        return '<tr>' + cells + '</tr>';
+      }).join('');
+
+      wrapper.innerHTML = '<table><thead><tr>' + header + '</tr></thead><tbody>' + rows + '</tbody></table>';
+      wrapper.innerHTML += '<p style="font-size:12px;color:#8b7d92;margin-top:6px;">* คุณลักษณะฯ/อ่านคิดวิเคราะห์เขียน แก้ไขได้ที่แท็บ "คุณลักษณะฯ"</p>';
+    }
+
+    function buildGradeSelect(r) {
+      const opts = [
+        { value: '', label: 'อัตโนมัติ (' + r.computedGrade + ')' },
+        { value: 'ร', label: 'ร' },
+        { value: 'มส', label: 'มส' }
+      ];
+      const optionsHtml = opts.map(o =>
+        '<option value="' + o.value + '"' + (r.gradeOverride === o.value ? ' selected' : '') + '>' + o.label + '</option>'
+      ).join('');
+      return '<select style="font-weight:600;padding:4px;border-radius:8px;border:1px solid #ecdff5;" ' +
+        'onchange="updateGradeOverride(this, \'' + r.studentId + '\')">' + optionsHtml + '</select>';
+    }
+
+    function updateGradeOverride(select, studentId) {
+      google.script.run
+        .withSuccessHandler(renderSummary)
+        .withFailureHandler(err => { onError(err); loadSummary(); })
+        .setGradeOverride(SUBJECT_ID, studentId, select.value);
+    }
+
+    function exportGradesToExcel() {
+      if (!currentSummaryData || !currentSummaryData.rows.length) {
+        alert('ยังไม่มีข้อมูลคะแนนให้ export (ต้องมีนักเรียนและรายการคะแนนในวิชานี้ก่อน)');
+        return;
+      }
+
+      const header = ['เลขที่', 'รหัสนักเรียน', 'ชื่อ-สกุล']
+        .concat(currentSummaryData.periods)
+        .concat(['คะแนนรวม', 'เกรด', 'คุณลักษณะฯ', 'อ่านคิดวิเคราะห์เขียน']);
+
+      const rows = currentSummaryData.rows.map(r => {
+        const periodValues = currentSummaryData.periods.map(p => r.periodScores[p] || 0);
+        return [r.rollNumber || '', r.studentCode, r.name].concat(periodValues)
+          .concat([r.total, r.grade, r.desiredCharacteristics || '', r.readThinkWrite || '']);
+      });
+
+      const wsData = [header].concat(rows);
+      const ws = XLSX.utils.aoa_to_sheet(wsData);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'สรุปผล');
+
+      const safeName = (SUBJECT_NAME || 'วิชา').replace(/[\\/:*?"<>|]/g, '_');
+      XLSX.writeFile(wb, 'คะแนน_' + safeName + '.xlsx');
+    }
+
+    // ---------- ปพ.5 ----------
+    let por5SchoolSettings = null;
+    let currentPor5Data = null;
+
+    function loadPor5() {
+      document.getElementById('por5ReportWrapper').innerHTML = '<div class="spinner-center"><div class="spinner"></div>กำลังโหลดรายงาน...</div>';
+      google.script.run.withSuccessHandler(settings => {
+        por5SchoolSettings = settings;
+        google.script.run.withSuccessHandler(renderPor5Report).withFailureHandler(onError).getPor5Report(SUBJECT_ID);
+      }).withFailureHandler(onError).getSettings();
+    }
+
+    function formatAdvisorNames_(names) {
+      if (!names || !names.length) return '1.-';
+      return names.map((n, i) => (i + 1) + '.' + escapeHtml(n)).join('&nbsp;&nbsp;&nbsp;');
+    }
+
+    function formatCredits_(val) {
+      if (val === '' || val === null || val === undefined) return '-';
+      const n = Number(val);
+      return isNaN(n) ? '-' : n.toFixed(1);
+    }
+
+    function renderPor5Report(data) {
+      currentPor5Data = data;
+      document.getElementById('por5RoomLabel').innerText = data.subject.classRoom || '-';
+      document.getElementById('advisorNameInput1').value = (data.advisorNames && data.advisorNames[0]) || '';
+      document.getElementById('advisorNameInput2').value = (data.advisorNames && data.advisorNames[1]) || '';
+      document.getElementById('advisorNameInput3').value = (data.advisorNames && data.advisorNames[2]) || '';
+
+      const wrapper = document.getElementById('por5ReportWrapper');
+      const empty = document.getElementById('por5EmptyState');
+
+      if (!data.totalStudents) {
+        wrapper.innerHTML = '';
+        empty.style.display = 'block';
+        empty.innerText = 'ยังไม่มีนักเรียนในวิชานี้ ไม่สามารถออกรายงานได้';
+        return;
+      }
+      empty.style.display = 'none';
+
+      const s = data.subject;
+      const settings = por5SchoolSettings || {};
+      const levelLabel = s.formType.indexOf('ตอนปลาย') !== -1 ? 'มัธยมศึกษาตอนปลาย' : 'มัธยมศึกษาตอนต้น';
+
+      let html = '<div class="por5-page" style="position:relative;">';
+      html += '<div style="position:absolute;top:3mm;right:3mm;font-size:16px;">' + s.shortFormLabel + '</div>';
+
+      if (settings.schoolLogo) html += '<div class="center"><img src="' + settings.schoolLogo + '" style="height:70px;object-fit:contain;"></div>';
+      html += '<p class="center" style="margin:6px 0 2px;font-weight:600;font-size:16px;">แบบบันทึกผลการพัฒนาคุณภาพผู้เรียน</p>';
+      if (settings.schoolName) html += '<p class="center" style="margin:2px 0;font-size:16px;">' + escapeHtml(settings.schoolName) +
+        (settings.schoolAddress ? ' ' + escapeHtml(settings.schoolAddress) : '') + '</p>';
+      if (settings.educationArea) html += '<p class="center" style="margin:2px 0;font-size:16px;">' + escapeHtml(settings.educationArea) + '</p>';
+      html += '<hr style="border:none;border-top:1px dashed #333;margin:10px 0;">';
+
+      const roomForLabel = String(s.classRoom || '-').replace(/^ม\.?\s*/, '');
+
+      html += '<table class="por5-info-table"><tbody>' +
+        '<tr><td style="width:55%;">ระดับ' + escapeHtml(levelLabel) + '</td>' +
+        '<td>ชั้นมัธยมศึกษาปีที่ ' + escapeHtml(roomForLabel) + '</td></tr>' +
+        '<tr><td colspan="2">ภาคเรียนที่ ' + escapeHtml(s.semester || '-') +
+        ' ปีการศึกษา ' + escapeHtml(s.academicYear || '-') + '</td></tr>' +
+        '<tr><td>กลุ่มสาระการเรียนรู้' + escapeHtml(s.learningArea || '-') + '</td>' +
+        '<td style="white-space:nowrap;">สาระการเรียนรู้ ' +
+        (s.subjectType === 'พื้นฐาน' ? '☑' : '☐') + ' พื้นฐาน &nbsp; ' +
+        (s.subjectType === 'เพิ่มเติม' ? '☑' : '☐') + ' เพิ่มเติม</td></tr>' +
+        '<tr><td>รายวิชา' + escapeHtml(s.subjectName) +
+        ' &nbsp; รหัสวิชา ' + escapeHtml(s.subjectCode || '-') + '</td>' +
+        '<td style="white-space:nowrap;">เวลาเรียน/สัปดาห์ ' + escapeHtml(s.hoursPerWeek || '-') +
+        ' คาบ &nbsp; จำนวนหน่วยกิต ' + escapeHtml(formatCredits_(s.credits)) + '</td></tr>' +
+        '<tr><td colspan="2">ชื่อครูผู้สอน ' + escapeHtml(data.teacherName || '-') + '</td></tr>' +
+        '<tr><td colspan="2">ชื่อครูที่ปรึกษา &nbsp; ' + formatAdvisorNames_(data.advisorNames) + '</td></tr>' +
+        '</tbody></table>';
+
+      html += '<div class="por5-section-title center">สรุปผลการพัฒนาคุณภาพผู้เรียน</div>';
+
+      const gradeCountCells = data.gradeDistribution.map(g => '<td>' + g.count + '</td>').join('');
+      const gradePercentCells = data.gradeDistribution.map(g => '<td>' + g.percent + '</td>').join('');
+      const numericGradedDisplay = data.numericGradedCount > 0 ? data.numericGradedCount : '-';
+
+      html += '<table class="data-table">' +
+        '<colgroup><col style="width:11%;">' +
+        data.gradeDistribution.map(() => '<col style="width:6%;">').join('') +
+        '<col style="width:6%;"><col style="width:6%;"><col style="width:6%;">' +
+        '<col style="width:11%;"><col style="width:11%;"></colgroup>' +
+        '<thead>' +
+        '<tr>' +
+        '<th rowspan="3">จำนวนนักเรียน<br>ทั้งหมด</th>' +
+        '<th colspan="11">จำนวนนักเรียนที่ได้ระดับผลการประเมิน สาระการเรียนรู้ (คน)</th>' +
+        '<th colspan="2" rowspan="2">ค่าสถิติ<br>(ค่าเฉลี่ย)</th>' +
+        '</tr>' +
+        '<tr>' +
+        '<th colspan="9">ระดับผลการเรียน</th>' +
+        '<th colspan="2">ผลการเรียน</th>' +
+        '</tr>' +
+        '<tr>' +
+        data.gradeDistribution.map(g => '<th>' + escapeHtml(g.grade) + '</th>').join('') +
+        '<th>รวม</th><th>ร</th><th>มส</th><th>คะแนน</th><th>ผลการ<br>เรียน</th>' +
+        '</tr>' +
+        '</thead><tbody>' +
+        '<tr><td>' + data.totalStudents + '</td>' + gradeCountCells + '<td>' + numericGradedDisplay + '</td>' +
+        '<td>' + data.rCell.count + '</td><td>' + data.msCell.count + '</td>' +
+        '<td>' + data.avgScore + '</td><td>' + data.avgGradePoint + '</td></tr>' +
+        '<tr><td>ร้อยละ</td>' + gradePercentCells + '<td>' + (data.numericGradedCount > 0 ? '100.00' : '-') + '</td>' +
+        '<td>' + data.rCell.percent + '</td><td>' + data.msCell.percent + '</td>' +
+        '<td>-</td><td>-</td></tr>' +
+        '</tbody></table>';
+
+      html += '<table class="data-table" style="margin-top:20px;">' +
+        '<colgroup><col style="width:12%;">' +
+        '<col style="width:11%;"><col style="width:11%;"><col style="width:11%;"><col style="width:11%;">' +
+        '<col style="width:11%;"><col style="width:11%;"><col style="width:11%;"><col style="width:11%;"></colgroup>' +
+        '<thead>' +
+        '<tr><th rowspan="3">จำนวนนักเรียน<br>ทั้งหมด</th>' +
+        '<th colspan="4">ผลการประเมินคุณลักษณะอันพึงประสงค์</th>' +
+        '<th colspan="4">ผลการประเมินการอ่าน คิด วิเคราะห์และเขียน</th></tr>' +
+        '<tr><th colspan="4">จำนวนนักเรียนที่ได้รับผลการประเมิน (คน)</th>' +
+        '<th colspan="4">จำนวนนักเรียนที่ได้รับผลการประเมิน (คน)</th></tr>' +
+        '<tr>' +
+        '<th>3(ดีเยี่ยม)</th><th>2(ดี)</th><th>1(ผ่าน)</th><th>0(ไม่ผ่าน)</th>' +
+        '<th>3(ดีเยี่ยม)</th><th>2(ดี)</th><th>1(ผ่าน)</th><th>0(ไม่ผ่าน)</th>' +
+        '</tr></thead><tbody>' +
+        '<tr><td>' + data.totalStudents + '</td>' +
+        data.characterDistribution.map(d => '<td>' + d.count + '</td>').join('') +
+        data.readThinkDistribution.map(d => '<td>' + d.count + '</td>').join('') +
+        '</tr>' +
+        '<tr><td>ร้อยละ</td>' +
+        data.characterDistribution.map(d => '<td>' + d.percent + '</td>').join('') +
+        data.readThinkDistribution.map(d => '<td>' + d.percent + '</td>').join('') +
+        '</tr>' +
+        '</tbody></table>';
+
+      const SIGN_PREFIX = '<span style="display:inline-block;width:3.6em;">ลงชื่อ</span>';
+      const SIGN_BLANK = '<span style="display:inline-block;width:3.6em;"></span>';
+      function nowrap_(text) { return '<span style="white-space:nowrap;">' + text + '</span>'; }
+
+      html += '<div class="por5-section-title">การอนุมัติผลการเรียน</div>';
+      html += '<table class="sign-table"><tbody>' +
+        '<tr style="border:none;"><td style="border:none;width:28%;"></td>' +
+        '<td style="border:none;">' + SIGN_PREFIX + '...................................... ' + nowrap_('ครูผู้สอน') + '</td></tr>' +
+        '<tr style="border:none;"><td style="border:none;"></td>' +
+        '<td style="border:none;">' + SIGN_PREFIX + '...................................... ' + nowrap_('หัวหน้ากลุ่มสาระการเรียนรู้') + '</td></tr>' +
+        '<tr style="border:none;"><td style="border:none;vertical-align:bottom;white-space:nowrap;">เรียนเสนอเพื่อพิจารณา</td>' +
+        '<td style="border:none;">' + SIGN_PREFIX + '...................................... ' + nowrap_('หัวหน้างานทะเบียนวัดผล') + '</td></tr>' +
+        '<tr style="border:none;"><td style="border:none;"></td>' +
+        '<td style="border:none;">' + SIGN_PREFIX + '...................................... ' + nowrap_('รองผู้อำนวยการฝ่ายวิชาการ') + '</td></tr>' +
+        '<tr style="border:none;"><td style="border:none;vertical-align:bottom;white-space:nowrap;">☐&nbsp; อนุมัติ &nbsp;&nbsp;&nbsp; ☐&nbsp; ไม่อนุมัติ</td>' +
+        '<td style="border:none;">' + SIGN_PREFIX + '...................................... ' + nowrap_('ผู้อำนวยการโรงเรียน') + '</td></tr>' +
+        '<tr style="border:none;"><td style="border:none;padding:2px 4px;"></td>' +
+        '<td style="border:none;padding:2px 4px;">' + SIGN_BLANK + '( ........................................... )</td></tr>' +
+        '<tr style="border:none;"><td style="border:none;padding:2px 4px;"></td>' +
+        '<td style="border:none;padding:2px 4px;">' + SIGN_BLANK + '............./.............../...............</td></tr>' +
+        '</tbody></table>';
+
+      html += '</div>';
+      wrapper.innerHTML = html;
+    }
+
+    function saveAdvisorName(btn) {
+      if (!currentPor5Data) return;
+      const s = currentPor5Data.subject;
+      const names = [
+        document.getElementById('advisorNameInput1').value.trim(),
+        document.getElementById('advisorNameInput2').value.trim(),
+        document.getElementById('advisorNameInput3').value.trim()
+      ];
+      setButtonLoading(btn, true);
+      google.script.run
+        .withSuccessHandler(() => { setButtonLoading(btn, false); alert('บันทึกชื่อครูที่ปรึกษาเรียบร้อยแล้ว'); loadPor5(); })
+        .withFailureHandler(err => { setButtonLoading(btn, false); onError(err); })
+        .setClassAdvisor(s.classRoom, s.academicYear, s.semester, names);
+    }
+
+    loadStudents();
+  </script>
+</body>
+</html>
